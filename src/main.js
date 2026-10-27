@@ -29,6 +29,7 @@ const state = {
   dragon: '',
   baron: '',
   view: { enemy: true, fog: true, rings: true, grid: false },
+  sight: { ...SIGHT },
 };
 let path = [];
 let tool = 'select';
@@ -68,6 +69,7 @@ function saveHash() {
     u: state.units.map((u) => [u.kind, u.team, Math.round(u.x), Math.round(u.z)]),
     t: [...state.deadTurrets],
     o: Object.entries(state.view).filter(([, on]) => on).map(([k]) => k),
+    r: Object.keys(SIGHT).some((k) => state.sight[k] !== SIGHT[k]) ? state.sight : undefined,
   };
   history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(s)));
 }
@@ -86,6 +88,7 @@ function loadHash() {
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
     state.deadTurrets = new Set(s.t || []);
+    for (const k of Object.keys(SIGHT)) if (s.r && Number(s.r[k]) > 0) state.sight[k] = Number(s.r[k]);
     if (Array.isArray(s.o)) for (const k of Object.keys(state.view)) state.view[k] = s.o.includes(k);
     return true;
   } catch {
@@ -97,13 +100,13 @@ function loadHash() {
 
 function sources(team) {
   const list = [];
-  if (team === 'ally') list.push({ name: 'You', x: state.me.x, z: state.me.z, sight: SIGHT.champion });
+  if (team === 'ally') list.push({ name: 'You', x: state.me.x, z: state.me.z, sight: state.sight.champion });
   state.units.forEach((u) => {
-    if (u.team === team) list.push({ name: (team === 'ally' ? 'Ally ' : 'Enemy ') + UNIT_KINDS[u.kind].label, x: u.x, z: u.z, sight: UNIT_KINDS[u.kind].sight, unit: u });
+    if (u.team === team) list.push({ name: (team === 'ally' ? 'Ally ' : 'Enemy ') + UNIT_KINDS[u.kind].label, x: u.x, z: u.z, sight: state.sight[u.kind], unit: u });
   });
   const side = sideOf(team);
   turrets.forEach((t, i) => {
-    if (t.side === side && !state.deadTurrets.has(i)) list.push({ name: `${t.side === 'blue' ? 'Blue' : 'Red'} ${t.lane} turret`, x: t.x, z: t.z, sight: SIGHT.turret, turret: i });
+    if (t.side === side && !state.deadTurrets.has(i)) list.push({ name: `${t.side === 'blue' ? 'Blue' : 'Red'} ${t.lane} turret`, x: t.x, z: t.z, sight: state.sight.turret, turret: i });
   });
   return list;
 }
@@ -534,6 +537,27 @@ document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('cli
   scheduleSave();
 }));
 
+// Sight radius tuning. Inputs are built from SIGHT so new kinds show up automatically.
+const SIGHT_LABELS = { champion: 'Champion', stealth: 'Stealth Ward', control: 'Control Ward', farsight: 'Farsight Ward', turret: 'Turret' };
+for (const k of Object.keys(SIGHT)) {
+  const label = document.createElement('label');
+  label.className = 'row';
+  label.textContent = SIGHT_LABELS[k] || k;
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = 100; input.max = 3000; input.step = 25; input.id = 'sight-' + k;
+  input.addEventListener('input', () => {
+    const v = Math.round(Number(input.value));
+    if (v >= 100 && v <= 3000) { state.sight[k] = v; sourcesChanged(); }
+  });
+  label.append(input);
+  $('sight-inputs').append(label);
+}
+$('sight-reset').addEventListener('click', () => {
+  state.sight = { ...SIGHT };
+  syncPanel();
+  sourcesChanged();
+});
+
 $('reset-exposure').addEventListener('click', () => { exposure.walked = 0; exposure.seen = 0; updateExposure(); });
 $('clear').addEventListener('click', () => { state.units = []; state.deadTurrets.clear(); sourcesChanged(); });
 $('default').addEventListener('click', () => { defaultScenario(); path = []; sourcesChanged(); });
@@ -551,6 +575,7 @@ function syncPanel() {
   $('dragon').value = state.dragon;
   $('baron').value = state.baron;
   for (const key of Object.keys(state.view)) $('view-' + key).checked = state.view[key];
+  for (const k of Object.keys(SIGHT)) $('sight-' + k).value = state.sight[k];
   syncFollow();
 }
 
