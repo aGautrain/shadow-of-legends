@@ -34,6 +34,7 @@ const state = {
 };
 let path = [];
 let tool = 'select';
+let ruler = null; // { a, b } in world units while measuring
 const camera = { x: 7400, z: 7400, scale: 0.12, follow: false };
 const exposure = { walked: 0, seen: 0 };
 let needsDraw = true;
@@ -339,6 +340,29 @@ function draw() {
   }
   ctx.fillStyle = COLORS.me; ctx.strokeStyle = state.side === 'blue' ? '#1d5fd1' : '#c4252f'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  if (ruler) drawRuler();
+}
+
+function drawRuler() {
+  const [ax, ay] = toScreen(ruler.a.x, ruler.a.z);
+  const [bx, by] = toScreen(ruler.b.x, ruler.b.z);
+  const dist = Math.hypot(ruler.b.x - ruler.a.x, ruler.b.z - ruler.a.z);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.arc(ax, ay, dist * camera.scale, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill(); }
+  const label = `${Math.round(dist)} units`;
+  ctx.font = '600 13px system-ui, sans-serif';
+  const tw = ctx.measureText(label).width;
+  const lx = bx + 12, ly = by - 12;
+  ctx.fillStyle = 'rgba(11,15,20,0.85)';
+  ctx.fillRect(lx - 6, ly - 15, tw + 12, 22);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(label, lx, ly);
 }
 
 // ---------------------------------------------------------------- status
@@ -446,6 +470,13 @@ canvas.addEventListener('pointerdown', (e) => {
     const u = hitUnit(sx, sy);
     if (u) { drag = { type: 'unit', unit: u }; return; }
     drag = { type: 'pan', sx, sy, cx: camera.x, cz: camera.z, moved: false, touch: e.pointerType === 'touch' };
+  } else if (tool === 'ruler') {
+    // Shift starts the measurement from your champion.
+    const a = e.shiftKey ? { x: state.me.x, z: state.me.z } : w;
+    ruler = { a, b: w };
+    drag = { type: 'ruler' };
+    updateRulerLabel();
+    needsDraw = true;
   } else if (tool === 'erase') {
     const u = hitUnit(sx, sy);
     if (u) { state.units = state.units.filter((v) => v !== u); hover = null; sourcesChanged(); }
@@ -482,6 +513,10 @@ canvas.addEventListener('pointermove', (e) => {
       camera.z = drag.cz + (sy - drag.sy) / camera.scale;
       needsDraw = true;
     }
+  } else if (drag.type === 'ruler') {
+    ruler.b = toWorld(sx, sy);
+    updateRulerLabel();
+    needsDraw = true;
   } else if (drag.type === 'unit') {
     const w = toWorld(sx, sy);
     const p = grid.nearestWalkable(w.x, w.z, sideOf(drag.unit.team));
@@ -528,7 +563,8 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 's' || e.key === 'S') { path = []; needsDraw = true; scheduleSave(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && hover) {
     state.units = state.units.filter((v) => v !== hover); hover = null; sourcesChanged();
-  } else if (e.key === 'Escape') setTool('select');
+  } else if (e.key === 'r' || e.key === 'R') setTool(tool === 'ruler' ? 'select' : 'ruler');
+  else if (e.key === 'Escape') setTool('select');
 });
 
 // ---------------------------------------------------------------- panel
@@ -537,7 +573,13 @@ function setTool(t) {
   tool = t;
   document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
   canvas.style.cursor = t === 'select' ? 'default' : 'crosshair';
+  $('ruler').classList.toggle('active', t === 'ruler');
+  if (t !== 'ruler') { ruler = null; updateRulerLabel(); needsDraw = true; }
 }
+function updateRulerLabel() {
+  $('ruler').textContent = ruler ? `📏 ${Math.round(Math.hypot(ruler.b.x - ruler.a.x, ruler.b.z - ruler.a.z))}` : '📏 Ruler';
+}
+$('ruler').addEventListener('click', () => setTool(tool === 'ruler' ? 'select' : 'ruler'));
 document.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
 
 function syncFollow() { $('follow').checked = camera.follow; }
