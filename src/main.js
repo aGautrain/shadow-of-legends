@@ -1,7 +1,7 @@
 import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
-import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, BACKGROUND, TERRAINS } from './config.js';
+import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS } from './config.js';
 
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
@@ -30,6 +30,7 @@ const state = {
   baron: '',
   view: { enemy: true, fog: true, rings: true, grid: false },
   sight: { ...SIGHT },
+  fogEdge: DEFAULT_FOG_EDGE,
 };
 let path = [];
 let tool = 'select';
@@ -69,6 +70,7 @@ function saveHash() {
     u: state.units.map((u) => [u.kind, u.team, Math.round(u.x), Math.round(u.z)]),
     t: [...state.deadTurrets],
     o: Object.entries(state.view).filter(([, on]) => on).map(([k]) => k),
+    e: state.fogEdge,
     r: Object.keys(SIGHT).some((k) => state.sight[k] !== SIGHT[k]) ? state.sight : undefined,
   };
   history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(s)));
@@ -88,6 +90,7 @@ function loadHash() {
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
     state.deadTurrets = new Set(s.t || []);
+    if (Number(s.e) >= 0) state.fogEdge = Number(s.e);
     for (const k of Object.keys(SIGHT)) if (s.r && Number(s.r[k]) > 0) state.sight[k] = Number(s.r[k]);
     if (Array.isArray(s.o)) for (const k of Object.keys(state.view)) state.view[k] = s.o.includes(k);
     return true;
@@ -138,18 +141,61 @@ const gridCanvas = document.createElement('canvas');
 gridCanvas.width = grid.w; gridCanvas.height = grid.h;
 const gridCtx = gridCanvas.getContext('2d');
 
+// Fog layer colors (premultiplied RGBA) for: enemy sees, my fog, both.
+const FOG_COLORS = {
+  enemy: [235, 40, 50, 105],
+  fog: [0, 0, 0, 150],
+  both: [150, 10, 20, 175],
+};
+const premul = (c) => [(c[0] * c[3]) / 255, (c[1] * c[3]) / 255, (c[2] * c[3]) / 255, c[3]];
+const FOG_PM = { enemy: premul(FOG_COLORS.enemy), fog: premul(FOG_COLORS.fog), both: premul(FOG_COLORS.both) };
+
+// Separable Gaussian blur of a w*h scalar field, sigma in cells.
+function blur(field, w, h, sigma) {
+  const r = Math.ceil(sigma * 3);
+  const k = new Float32Array(2 * r + 1);
+  let sum = 0;
+  for (let i = -r; i <= r; i++) sum += k[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma));
+  for (let i = 0; i < k.length; i++) k[i] /= sum;
+  const tmp = new Float32Array(w * h);
+  for (let z = 0; z < h; z++) {
+    for (let x = 0; x < w; x++) {
+      let v = 0;
+      for (let i = -r; i <= r; i++) v += k[i + r] * field[z * w + Math.min(w - 1, Math.max(0, x + i))];
+      tmp[z * w + x] = v;
+    }
+  }
+  for (let z = 0; z < h; z++) {
+    for (let x = 0; x < w; x++) {
+      let v = 0;
+      for (let i = -r; i <= r; i++) v += k[i + r] * tmp[Math.min(h - 1, Math.max(0, z + i)) * w + x];
+      field[z * w + x] = v;
+    }
+  }
+}
+
 function paintFog() {
-  const img = fogCtx.createImageData(grid.w, grid.h);
+  const { w, h } = grid;
+  const e = new Float32Array(w * h), f = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    e[i] = state.view.enemy && has(enemyBits, i) ? 1 : 0;
+    f[i] = state.view.fog && !has(allyBits, i) ? 1 : 0;
+  }
+  // The game fades fog over a band; a Gaussian goes from 5% to 95% over about 3.3 sigma.
+  const sigma = state.fogEdge / grid.cell / 3.3;
+  if (sigma > 0.05) { blur(e, w, h, sigma); blur(f, w, h, sigma); }
+
+  const img = fogCtx.createImageData(w, h);
   const d = img.data;
-  for (let z = 0; z < grid.h; z++) {
-    for (let x = 0; x < grid.w; x++) {
-      const i = z * grid.w + x;
-      const o = ((grid.h - 1 - z) * grid.w + x) * 4;
-      const e = state.view.enemy && has(enemyBits, i);
-      const f = state.view.fog && !has(allyBits, i);
-      if (e && f) { d[o] = 150; d[o + 1] = 10; d[o + 2] = 20; d[o + 3] = 175; }
-      else if (e) { d[o] = 235; d[o + 1] = 40; d[o + 2] = 50; d[o + 3] = 105; }
-      else if (f) { d[o + 3] = 150; }
+  for (let z = 0; z < h; z++) {
+    for (let x = 0; x < w; x++) {
+      const i = z * w + x;
+      const o = ((h - 1 - z) * w + x) * 4;
+      const we = e[i] * (1 - f[i]), wf = f[i] * (1 - e[i]), wb = e[i] * f[i];
+      const a = we * FOG_PM.enemy[3] + wf * FOG_PM.fog[3] + wb * FOG_PM.both[3];
+      if (a < 0.5) continue;
+      for (let c = 0; c < 3; c++) d[o + c] = ((we * FOG_PM.enemy[c] + wf * FOG_PM.fog[c] + wb * FOG_PM.both[c]) * 255) / a;
+      d[o + 3] = a;
     }
   }
   fogCtx.putImageData(img, 0, 0);
@@ -552,8 +598,13 @@ for (const k of Object.keys(SIGHT)) {
   label.append(input);
   $('sight-inputs').append(label);
 }
+$('fog-edge').addEventListener('input', (e) => {
+  const v = Math.round(Number(e.target.value));
+  if (v >= 0 && v <= 1000) { state.fogEdge = v; paintFog(); needsDraw = true; scheduleSave(); }
+});
 $('sight-reset').addEventListener('click', () => {
   state.sight = { ...SIGHT };
+  state.fogEdge = DEFAULT_FOG_EDGE;
   syncPanel();
   sourcesChanged();
 });
@@ -576,6 +627,7 @@ function syncPanel() {
   $('baron').value = state.baron;
   for (const key of Object.keys(state.view)) $('view-' + key).checked = state.view[key];
   for (const k of Object.keys(SIGHT)) $('sight-' + k).value = state.sight[k];
+  $('fog-edge').value = state.fogEdge;
   syncFollow();
 }
 

@@ -10,6 +10,10 @@ export const SIGHT = {
 
 export const DEFAULT_MOVE_SPEED = 345;
 
+// Width of the fog's soft edge, like the fade the game draws. Visual only:
+// whether a unit is seen still uses the hard sight radius.
+export const DEFAULT_FOG_EDGE = 250;
+
 export const UNIT_KINDS = {
   champion: { label: 'Champion', sight: SIGHT.champion },
   stealth: { label: 'Stealth Ward', sight: SIGHT.stealth },
