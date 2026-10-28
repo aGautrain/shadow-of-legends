@@ -1,14 +1,21 @@
 import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
-import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS } from './config.js';
+import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS, PATCHES } from './config.js';
 
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 const $ = (id) => document.getElementById(id);
 
-const res = await fetch('data/navgrid.json');
-const grid = new NavGrid(await res.json());
+// The patch is read before everything else because the grid is built once;
+// switching patch saves the scenario and reloads the page.
+function hashPatch() {
+  try { return JSON.parse(decodeURIComponent(location.hash.slice(1))).p; } catch { return undefined; }
+}
+const patch = PATCHES.find((p) => p.id === hashPatch()) || PATCHES[0];
+const res = await fetch(patch.src);
+const navData = await res.json();
+const grid = new NavGrid(navData);
 const vision = new Vision(grid);
 const turrets = grid.findTurrets();
 const MAP = grid.w * grid.cell;
@@ -67,6 +74,7 @@ function defaultScenario() {
 
 function saveHash() {
   const s = {
+    p: patch === PATCHES[0] ? undefined : patch.id,
     s: state.side, v: state.speed, d: state.dragon, b: state.baron, a: state.atakhan,
     m: [Math.round(state.me.x), Math.round(state.me.z)],
     u: state.units.map((u) => [u.kind, u.team, Math.round(u.x), Math.round(u.z)]),
@@ -89,6 +97,7 @@ function loadHash() {
     state.dragon = TERRAINS.dragon.some(([k]) => k === s.d) ? s.d : '';
     state.baron = TERRAINS.baron.some(([k]) => k === s.b) ? s.b : '';
     state.atakhan = TERRAINS.atakhan.some(([k]) => k === s.a) ? s.a : '';
+    for (const k of ['dragon', 'baron', 'atakhan']) if (!grid.overlays[state[k]]) state[k] = '';
     state.me = { x: s.m[0], z: s.m[1] };
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
@@ -600,6 +609,22 @@ for (const [kind, sel] of [['dragon', $('dragon')], ['baron', $('baron')], ['ata
   for (const [value, label] of TERRAINS[kind]) sel.add(new Option(label, value));
   sel.addEventListener('change', () => { state[kind] = sel.value; applyTerrain(); });
 }
+
+// Terrains the selected patch has no overlay for (e.g. Atakhan before 2025).
+for (const sel of document.querySelectorAll('#dragon, #baron, #atakhan')) {
+  for (const opt of sel.options) if (opt.value && !grid.overlays[opt.value]) opt.disabled = true;
+}
+
+for (const p of PATCHES) $('patch').add(new Option(p.label, p.id));
+$('patch').value = patch.id;
+$('patch-source').textContent = navData.source || patch.label;
+$('patch').addEventListener('change', (e) => {
+  saveHash();
+  const s = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+  s.p = e.target.value === PATCHES[0].id ? undefined : e.target.value;
+  history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(s)));
+  location.reload();
+});
 
 function terrainLayers() { return [state.dragon, state.baron, state.atakhan].filter(Boolean); }
 

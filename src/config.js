@@ -44,3 +44,9 @@ export const TERRAINS = {
     ['atakhanBot', 'Atakhan: bot side'],
   ],
 };
+
+// Navgrid builds the map can run on, newest first. The first is the default.
+export const PATCHES = [
+  { id: '16.21', label: 'Patch 16.21 (live)', src: 'data/navgrid.json' },
+  { id: '2024', label: '2024 (LoL-NGRID-converter)', src: 'data/navgrid-2024.json' },
+];
