@@ -1,13 +1,18 @@
 import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
-import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS } from './config.js';
+import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS, PATCHES } from './config.js';
 
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 const $ = (id) => document.getElementById(id);
 
-const res = await fetch('data/navgrid.json');
+// The patch is read before anything else, since it decides which grid to load.
+function hashPatch() {
+  try { return JSON.parse(decodeURIComponent(location.hash.slice(1))).p; } catch { return undefined; }
+}
+const patch = PATCHES.find(([id]) => id === hashPatch()) || PATCHES[0];
+const res = await fetch(patch[2]);
 const grid = new NavGrid(await res.json());
 const vision = new Vision(grid);
 const turrets = grid.findTurrets();
@@ -72,6 +77,7 @@ function saveHash() {
     u: state.units.map((u) => [u.kind, u.team, Math.round(u.x), Math.round(u.z)]),
     t: [...state.deadTurrets],
     o: Object.entries(state.view).filter(([, on]) => on).map(([k]) => k),
+    p: patch[0],
     e: state.fogEdge,
     r: Object.keys(SIGHT).some((k) => state.sight[k] !== SIGHT[k]) ? state.sight : undefined,
   };
@@ -88,7 +94,7 @@ function loadHash() {
     state.speed = Number(s.v) || DEFAULT_MOVE_SPEED;
     state.dragon = TERRAINS.dragon.some(([k]) => k === s.d) ? s.d : '';
     state.baron = TERRAINS.baron.some(([k]) => k === s.b) ? s.b : '';
-    state.atakhan = TERRAINS.atakhan.some(([k]) => k === s.a) ? s.a : '';
+    state.atakhan = TERRAINS.atakhan.some(([k]) => k === s.a) && grid.overlays[s.a] ? s.a : '';
     state.me = { x: s.m[0], z: s.m[1] };
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
@@ -665,6 +671,21 @@ $('share').addEventListener('click', async () => {
   setTimeout(() => { $('share').textContent = 'Copy share link'; }, 1800);
 });
 $('toggle-panel').addEventListener('click', () => document.body.classList.toggle('panel-hidden'));
+
+for (const [id, label] of PATCHES) $('patch').add(new Option(label, id));
+$('patch').value = patch[0];
+$('patch').addEventListener('change', (e) => {
+  // Switching grids reloads the page with the same scenario.
+  saveHash();
+  const s = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+  s.p = e.target.value;
+  location.hash = encodeURIComponent(JSON.stringify(s));
+  location.reload();
+});
+// Older grids may lack some overlays (Atakhan was added after 2024).
+for (const kind of Object.keys(TERRAINS)) {
+  for (const opt of $(kind).options) opt.disabled = opt.value !== '' && !grid.overlays[opt.value];
+}
 
 function syncPanel() {
   $('side').value = state.side;

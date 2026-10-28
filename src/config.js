@@ -25,6 +25,12 @@ export const UNIT_KINDS = {
 // navgrid wall edges over the render.
 export const BACKGROUND = { src: 'assets/summoners-rift.jpg', minX: -157, minZ: -97, size: 15000 };
 
+// Map data versions. The first entry is the default.
+export const PATCHES = [
+  ['16.21', '16.21 (your install)', 'data/navgrid.json'],
+  ['2024', '2024 (GitHub repo)', 'data/navgrid-2024.json'],
+];
+
 export const TERRAINS = {
   dragon: [
     ['', 'No soul terrain'],
