@@ -1,0 +1,58 @@
+{
+ "infernal": {
+  "src": "assets/terrain/infernal.webp",
+  "x": 983,
+  "y": 945,
+  "w": 2264,
+  "h": 2801
+ },
+ "ocean": {
+  "src": "assets/terrain/ocean.webp",
+  "x": 223,
+  "y": 192,
+  "w": 3715,
+  "h": 3699
+ },
+ "mountain": {
+  "src": "assets/terrain/mountain.webp",
+  "x": 749,
+  "y": 653,
+  "w": 2641,
+  "h": 3093
+ },
+ "chemtech": {
+  "src": "assets/terrain/chemtech.webp",
+  "x": 172,
+  "y": 149,
+  "w": 3800,
+  "h": 3778
+ },
+ "hextech": {
+  "src": "assets/terrain/hextech.webp",
+  "x": 1368,
+  "y": 2599,
+  "w": 1804,
+  "h": 1118
+ },
+ "cloud": {
+  "src": "assets/terrain/cloud.webp",
+  "x": 909,
+  "y": 919,
+  "w": 2341,
+  "h": 2798
+ },
+ "baronCup": {
+  "src": "assets/terrain/baronCup.webp",
+  "x": 987,
+  "y": 902,
+  "w": 739,
+  "h": 673
+ },
+ "baronTunnel": {
+  "src": "assets/terrain/baronTunnel.webp",
+  "x": 909,
+  "y": 903,
+  "w": 964,
+  "h": 787
+ }
+}

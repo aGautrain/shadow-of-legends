@@ -31,6 +31,9 @@ export const PATCHES = [
   ['2024', '2024 (GitHub repo)', 'data/navgrid-2024.json'],
 ];
 
+// Terrains that change the map art but not walls or brush.
+export const ART_ONLY_TERRAINS = ['hextech', 'cloud'];
+
 export const TERRAINS = {
   dragon: [
     ['', 'No soul terrain'],
@@ -38,6 +41,8 @@ export const TERRAINS = {
     ['ocean', 'Ocean'],
     ['mountain', 'Mountain'],
     ['chemtech', 'Chemtech'],
+    ['hextech', 'Hextech'],
+    ['cloud', 'Cloud'],
   ],
   baron: [
     ['', 'Default pit'],

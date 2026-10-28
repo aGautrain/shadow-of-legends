@@ -1,7 +1,7 @@
 import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
-import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS, PATCHES } from './config.js';
+import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS, PATCHES, ART_ONLY_TERRAINS } from './config.js';
 
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
@@ -21,6 +21,15 @@ const MAP = grid.w * grid.cell;
 const bg = new Image();
 bg.src = BACKGROUND.src;
 bg.onload = () => { needsDraw = true; };
+
+// Terrain art patches (assets/terrain), drawn over the base image when picked.
+// Rectangles are in pixels of the base image.
+const terrainArt = await fetch('assets/terrain/terrain.json').then((r) => r.json()).catch(() => ({}));
+for (const art of Object.values(terrainArt)) {
+  art.img = new Image();
+  art.img.src = art.src;
+  art.img.onload = () => { needsDraw = true; };
+}
 
 // ---------------------------------------------------------------- state
 
@@ -270,6 +279,11 @@ function draw() {
     const [bx, by] = toScreen(BACKGROUND.minX, BACKGROUND.minZ + BACKGROUND.size);
     const bs = BACKGROUND.size * camera.scale;
     ctx.drawImage(bg, bx, by, bs, bs);
+    const px = bs / bg.naturalWidth;
+    for (const layer of terrainLayers()) {
+      const art = terrainArt[layer];
+      if (art && art.img.complete && art.img.naturalWidth) ctx.drawImage(art.img, bx + art.x * px, by + art.y * px, art.w * px, art.h * px);
+    }
   }
   ctx.imageSmoothingEnabled = false;
   if (state.view.grid) ctx.drawImage(gridCanvas, gx, gy, gw, gh);
@@ -684,7 +698,7 @@ $('patch').addEventListener('change', (e) => {
 });
 // Older grids may lack some overlays (Atakhan was added after 2024).
 for (const kind of Object.keys(TERRAINS)) {
-  for (const opt of $(kind).options) opt.disabled = opt.value !== '' && !grid.overlays[opt.value];
+  for (const opt of $(kind).options) opt.disabled = opt.value !== '' && !grid.overlays[opt.value] && !ART_ONLY_TERRAINS.includes(opt.value);
 }
 
 function syncPanel() {

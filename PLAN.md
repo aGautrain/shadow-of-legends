@@ -16,6 +16,7 @@ files or the official wiki, so what you learn transfers one-to-one to the game.
 | Dragon soul terrain (Infernal, Ocean, Mountain, Chemtech), Baron pit and Atakhan pit variants | Riot's `.ngrid_overlay` files for the same map | `data/navgrid.json` → `overlays` |
 | Turret positions | Structure cells (flag 0x4) in the navgrid, grouped into blobs | computed at load |
 | Background art | Top-down render of the 2024 map geometry, aligned to the navgrid (checked by tracing wall edges over the art) | `assets/summoners-rift.jpg` |
+| Terrain art (dragon souls incl. Hextech and Cloud, Baron pits) | Per-variant renders, cut by `tools/make_terrain_art.py` into patches of the pixels that differ from the base render | `assets/terrain/` |
 
 The navgrid and its 8 overlays were extracted from a live install (patch
 16.21.8298620) of `Game/DATA/FINAL/Maps/Shipping/Map11.wad.client`; the raw
