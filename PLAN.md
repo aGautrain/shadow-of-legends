@@ -12,22 +12,27 @@ files or the official wiki, so what you learn transfers one-to-one to the game.
 
 | What | Source | In the repo |
 | --- | --- | --- |
-| Walls, brush, see-through walls, team-only base gates | Summoner's Rift navgrid `AIPath_SRX_3.aimesh_ngrid` (295 x 296 cells of 50 units), 2024 / Season 14 layout | `data/navgrid.json` (raw 16-bit flags per cell) |
-| Dragon soul terrain (Infernal, Ocean, Mountain, Chemtech) and Baron pit variants | Riot's `.ngrid_overlay` files for the same map | `data/navgrid.json` → `overlays` |
+| Walls, brush, see-through walls, team-only base gates | Summoner's Rift navgrid `AIPath_SRX_3.aimesh_ngrid` (295 x 296 cells of 50 units), live patch 16.21 | `data/navgrid.json` (raw 16-bit flags per cell) |
+| Dragon soul terrain (Infernal, Ocean, Mountain, Chemtech), Baron pit and Atakhan pit variants | Riot's `.ngrid_overlay` files for the same map | `data/navgrid.json` → `overlays` |
 | Turret positions | Structure cells (flag 0x4) in the navgrid, grouped into blobs | computed at load |
-| Background art | Top-down render of the map geometry, aligned to the navgrid (checked by tracing wall edges over the art) | `assets/summoners-rift.jpg` |
+| Background art | Top-down render of the 2024 map geometry, aligned to the navgrid (checked by tracing wall edges over the art) | `assets/summoners-rift.jpg` |
 
-The navgrid and overlay files come from the
-[LoL-NGRID-converter](https://github.com/FrankTheBoxMonster/LoL-NGRID-converter)
-repo (`SR_2024/`). `tools/extract_navgrid.py` is our own parser for the
-binary formats, so the data can be refreshed from a current game install:
+The navgrid and its 8 overlays were extracted from a live install (patch
+16.21.8298620) of `Game/DATA/FINAL/Maps/Shipping/Map11.wad.client`; the raw
+files and their original paths and hashes are on the `navgrid-extract`
+branch (`raw/navgrid/INFO.md`). `tools/extract_navgrid.py` is our own parser
+for the binary formats. To refresh after a patch:
 
-1. Unpack `Game/DATA/FINAL/Maps/Shipping/Map11.wad.client` with a
-   LeagueToolkit-based tool (for example Obsidian), with the game closed.
-2. Run `python3 tools/extract_navgrid.py <AIPath.aimesh_ngrid> infernal=<...ngrid_overlay> ... -o data/navgrid.json`.
+1. Unpack `Map11.wad.client` with the game closed and take
+   `ASSETS/Maps/NavGrid/Map11/AIPath_SRX_3.aimesh_ngrid` and
+   `ASSETS/Maps/NavGrid/NavGrid_*.ngrid_overlay`.
+2. Run `python3 tools/extract_navgrid.py <AIPath_SRX_3.aimesh_ngrid> infernal=<...ngrid_overlay> ... -o data/navgrid.json`.
 
-Known gap: map changes after Season 14 (for example the 2025 Atakhan pit) are
-not in this grid until step 1 is done on a current install.
+Compared with the 2024 grid first used (from
+[LoL-NGRID-converter](https://github.com/FrankTheBoxMonster/LoL-NGRID-converter),
+`SR_2024/`), patch 16.21 changes only 3 cells (walkable to brush, top lane
+edge) and adds the two Atakhan pit overlays. The background art is still
+the 2024 render.
 
 ## 2. Vision rules the sim applies
 

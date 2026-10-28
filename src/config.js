@@ -38,4 +38,9 @@ export const TERRAINS = {
     ['baronCup', 'Baron pit: cup'],
     ['baronTunnel', 'Baron pit: tunnel'],
   ],
+  atakhan: [
+    ['', 'No Atakhan'],
+    ['atakhanTop', 'Atakhan: top side'],
+    ['atakhanBot', 'Atakhan: bot side'],
+  ],
 };

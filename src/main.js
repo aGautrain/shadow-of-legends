@@ -28,6 +28,7 @@ const state = {
   deadTurrets: new Set(),
   dragon: '',
   baron: '',
+  atakhan: '',
   view: { enemy: true, fog: true, rings: true, grid: false },
   sight: { ...SIGHT },
   fogEdge: DEFAULT_FOG_EDGE,
@@ -66,7 +67,7 @@ function defaultScenario() {
 
 function saveHash() {
   const s = {
-    s: state.side, v: state.speed, d: state.dragon, b: state.baron,
+    s: state.side, v: state.speed, d: state.dragon, b: state.baron, a: state.atakhan,
     m: [Math.round(state.me.x), Math.round(state.me.z)],
     u: state.units.map((u) => [u.kind, u.team, Math.round(u.x), Math.round(u.z)]),
     t: [...state.deadTurrets],
@@ -87,6 +88,7 @@ function loadHash() {
     state.speed = Number(s.v) || DEFAULT_MOVE_SPEED;
     state.dragon = TERRAINS.dragon.some(([k]) => k === s.d) ? s.d : '';
     state.baron = TERRAINS.baron.some(([k]) => k === s.b) ? s.b : '';
+    state.atakhan = TERRAINS.atakhan.some(([k]) => k === s.a) ? s.a : '';
     state.me = { x: s.m[0], z: s.m[1] };
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
@@ -594,13 +596,15 @@ for (const key of Object.keys(state.view)) {
   });
 }
 
-for (const [kind, sel] of [['dragon', $('dragon')], ['baron', $('baron')]]) {
+for (const [kind, sel] of [['dragon', $('dragon')], ['baron', $('baron')], ['atakhan', $('atakhan')]]) {
   for (const [value, label] of TERRAINS[kind]) sel.add(new Option(label, value));
   sel.addEventListener('change', () => { state[kind] = sel.value; applyTerrain(); });
 }
 
+function terrainLayers() { return [state.dragon, state.baron, state.atakhan].filter(Boolean); }
+
 function applyTerrain() {
-  grid.setTerrain([state.dragon, state.baron].filter(Boolean));
+  grid.setTerrain(terrainLayers());
   vision.reset();
   paintGrid();
   path = [];
@@ -667,6 +671,7 @@ function syncPanel() {
   $('speed').value = state.speed;
   $('dragon').value = state.dragon;
   $('baron').value = state.baron;
+  $('atakhan').value = state.atakhan;
   for (const key of Object.keys(state.view)) $('view-' + key).checked = state.view[key];
   for (const k of Object.keys(SIGHT)) $('sight-' + k).value = state.sight[k];
   $('fog-edge').value = state.fogEdge;
@@ -676,7 +681,8 @@ function syncPanel() {
 // ---------------------------------------------------------------- start
 
 if (!loadHash()) defaultScenario();
-if (state.dragon || state.baron) grid.setTerrain([state.dragon, state.baron].filter(Boolean));
+const layers = terrainLayers();
+if (layers.length) grid.setTerrain(layers);
 syncPanel();
 paintGrid();
 window.addEventListener('resize', resize);

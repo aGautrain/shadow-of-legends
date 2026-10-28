@@ -33,7 +33,8 @@ python3 tools/extract_navgrid.py AIPath.aimesh_ngrid \
 
 ## Credits
 
-Navgrid files, overlays and the map render come from
+The navgrid and overlays are extracted from the live game (patch 16.21).
+The map render comes from
 [FrankTheBoxMonster/LoL-NGRID-converter](https://github.com/FrankTheBoxMonster/LoL-NGRID-converter)
 (`SR_2024/`). Game data belongs to Riot Games.
 
