@@ -6,13 +6,15 @@ export const RULES = {
   hide: 40, // default hide phase, host can change it in the lobby
   seek: 180, // default seek phase, host can change it in the lobby
   catchTime: 2, // seconds in a row inside the seekers' vision to be caught
-  wardsPerSeeker: 2,
+  seekerWards: 2, // Stealth Wards per seeker, host can change it in the lobby
+  hiderWards: 0, // Stealth Wards per hider, host can change it in the lobby
   wardRange: 600, // like the trinket: placed at the cursor, up to this far
   roundBreak: 8, // summary between the two rounds
 };
 
 export const HIDE_CHOICES = [20, 30, 40, 60];
 export const SEEK_CHOICES = [90, 120, 180, 240, 300];
+export const WARD_CHOICES = [0, 1, 2, 3, 4, 5];
 
 // Fountain spawn centers. Players are spread on a small circle around them.
 export const FOUNTAIN = {

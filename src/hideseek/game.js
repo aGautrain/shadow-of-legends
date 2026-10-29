@@ -6,7 +6,7 @@ import { Vision, has } from '../vision.js';
 import { findPath } from '../path.js';
 import { blur } from '../blur.js';
 import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl } from './champions.js';
@@ -172,7 +172,9 @@ const isHost = () => myId === HOST_ID;
 for (const s of HIDE_CHOICES) $('set-hide').add(new Option(`${s} s`, s));
 for (const s of SEEK_CHOICES) $('set-seek').add(new Option(s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s / 60} min`, s));
 $('rule-catch').textContent = RULES.catchTime;
-$('rule-wards').textContent = RULES.wardsPerSeeker;
+for (const id of ['set-seeker-wards', 'set-hider-wards']) for (const n of WARD_CHOICES) $(id).add(new Option(String(n), n));
+const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-seeker-wards', 'set-hider-wards', 'set-training'];
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function renderLobby() {
   if (!room || !myId) return;
@@ -201,8 +203,11 @@ function renderLobby() {
   const s = room.settings;
   $('set-hide').value = s.hide;
   $('set-seek').value = s.seek;
+  $('set-seeker-wards').value = s.seekerWards;
+  $('set-hider-wards').value = s.hiderWards;
   $('set-training').checked = s.training;
-  for (const id of ['set-hide', 'set-seek', 'set-training']) $(id).disabled = !isHost();
+  for (const id of SETTING_INPUTS) $(id).disabled = !isHost();
+  $('rule-wards').textContent = `Seekers get ${plural(s.seekerWards, 'Stealth Ward')} each, hiders ${s.hiderWards}.`;
   $('settings-note').textContent = isHost() ? '(you are the host)' : '(set by the host)';
   lobbyStatus();
 }
@@ -304,8 +309,11 @@ $('lobby-name').addEventListener('input', () => {
     if (name) { store.set('sol-hs-name', name); send({ t: 'set', name }); }
   }, 350);
 });
-const sendSettings = () => send({ t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked });
-for (const id of ['set-hide', 'set-seek', 'set-training']) $(id).addEventListener('change', sendSettings);
+const sendSettings = () => send({
+  t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked,
+  seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value),
+});
+for (const id of SETTING_INPUTS) $(id).addEventListener('change', sendSettings);
 $('copy-link').addEventListener('click', async () => {
   const url = location.origin + location.pathname + location.search + '#' + roomCode;
   try { await navigator.clipboard.writeText(url); $('copy-link').textContent = 'Link copied'; }
@@ -324,6 +332,8 @@ let path = [];
 const isSeeker = () => myTeam() === game.seekTeam;
 const playing = () => game.phase === 'hide' || game.phase === 'seek';
 const spectating = () => !playing() || me.caught;
+// Hiders may ward from the hide phase on; seekers once they are released.
+const wardPhase = () => game.phase === 'seek' || (game.phase === 'hide' && !isSeeker());
 const canMove = () => !me.caught && (game.phase === 'seek' || (game.phase === 'hide' && !isSeeker()));
 
 function onPhase(m) {
@@ -338,7 +348,7 @@ function onPhase(m) {
     const s = m.spawns[myId];
     if (s) { me.x = s.x; me.z = s.z; }
     me.caught = false; me.spot = 0; path = [];
-    me.wards = isSeeker() ? RULES.wardsPerSeeker : 0;
+    me.wards = game.settings ? (isSeeker() ? game.settings.seekerWards : game.settings.hiderWards) : 0;
     others.clear();
     for (const [id, p] of Object.entries(m.spawns)) {
       if (id !== myId) others.set(id, { x: p.x, z: p.z, tx: p.x, tz: p.z, caught: false, spot: 0 });
@@ -411,9 +421,7 @@ function teamSources(team) {
     const p = playerById(id);
     if (p && p.team === team && !o.caught) list.push({ x: o.x, z: o.z, sight: SIGHT.champion });
   }
-  if (team === game.seekTeam) {
-    for (const w of wards) { const p = playerById(w.owner); if (p && p.team === team) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth }); }
-  }
+  for (const w of wards) { const p = playerById(w.owner); if (p && p.team === team) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth }); }
   return list;
 }
 const bitsOf = (list) => vision.merge(list.map((s) => vision.source(s.x, s.z, s.sight)));
@@ -581,14 +589,14 @@ function renderHud() {
   if (game.phase === 'hide') {
     html = isSeeker()
       ? `Round ${game.round} · <span class="time">${clock(left)}</span> · Hiders are hiding. You are held in your fountain.`
-      : `Round ${game.round} · <span class="time">${clock(left)}</span> · Hide! ${seekName} is released after this.`;
+      : `Round ${game.round} · <span class="time">${clock(left)}</span> · Hide! ${seekName} is released after this.${me.wards ? ` · Wards ${me.wards} (W)` : ''}`;
   } else if (game.phase === 'seek') {
     const hiders = playerList().filter((p) => p.team !== game.seekTeam);
     const caught = hiders.filter((p) => (p.id === myId ? me.caught : (others.get(p.id) || {}).caught)).length;
     if (isSeeker()) html = `Seek · <span class="time">${clock(left)}</span> · Caught ${caught}/${hiders.length} · Wards ${me.wards}`;
     else if (me.caught) html = `Caught · spectating · <span class="time">${clock(left)}</span> · ${caught}/${hiders.length} caught`;
     else if (me.spot > 0) { cls += ' seen'; html = `<strong>Spotted!</strong> Break their sight · <span class="time">${clock(left)}</span>`; }
-    else { cls += ' hidden-ok'; html = `<strong>Hidden</strong> · <span class="time">${clock(left)}</span> · ${hiders.length - caught} hider${hiders.length - caught === 1 ? '' : 's'} left`; }
+    else { cls += ' hidden-ok'; html = `<strong>Hidden</strong> · <span class="time">${clock(left)}</span> · ${hiders.length - caught} hider${hiders.length - caught === 1 ? '' : 's'} left${me.wards ? ` · Wards ${me.wards}` : ''}`; }
   } else if (game.phase === 'break') {
     html = `Round 2 in <span class="time">${clock(left)}</span>`;
   } else if (game.phase === 'results') {
@@ -621,8 +629,9 @@ function renderBoard() {
 }
 
 function syncButtons() {
-  const canWard = game.phase === 'seek' && isSeeker() && me.wards > 0;
-  $('ward-btn').hidden = !(playing() && isSeeker());
+  const canWard = wardPhase() && me.wards > 0 && !me.caught;
+  const allowance = game.settings ? (isSeeker() ? game.settings.seekerWards : game.settings.hiderWards) : 0;
+  $('ward-btn').hidden = !(playing() && allowance > 0);
   $('ward-btn').disabled = !canWard;
   $('ward-btn').textContent = `Ward (W) · ${me.wards}`;
   $('follow-btn').classList.toggle('on', camera.follow);
@@ -687,7 +696,7 @@ function orderMove(x, z) {
 }
 
 function placeWard(target) {
-  if (!(game.phase === 'seek' && isSeeker() && me.wards > 0 && !me.caught)) return;
+  if (!(wardPhase() && me.wards > 0 && !me.caught)) return;
   let { x, z } = target || me;
   const d = Math.hypot(x - me.x, z - me.z);
   if (d > RULES.wardRange) { x = me.x + ((x - me.x) * RULES.wardRange) / d; z = me.z + ((z - me.z) * RULES.wardRange) / d; }

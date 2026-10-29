@@ -76,6 +76,8 @@
         <legend>Rules <span id="settings-note" class="muted"></span></legend>
         <label class="row">Hide time <select id="set-hide"></select></label>
         <label class="row">Seek time <select id="set-seek"></select></label>
+        <label class="row">Wards per seeker <select id="set-seeker-wards"></select></label>
+        <label class="row">Wards per hider <select id="set-hider-wards"></select></label>
         <label class="check"><input type="checkbox" id="set-training"> Training: hiders see the seekers' vision in red</label>
       </fieldset>
 
@@ -87,7 +89,7 @@
           <li>Round 1: <span class="blue-text">Blue</span> seeks and <span class="red-text">Red</span> hides. Round 2: the other way round.</li>
           <li><strong>Hide phase:</strong> hiders leave their fountain and find a spot. Seekers wait in theirs.</li>
           <li><strong>Seek phase:</strong> a hider who stays in the seeking team's vision for <span id="rule-catch"></span> s in a row is caught. Brush hides you unless a seeker or ward is in that same brush, and walls block sight.</li>
-          <li>Seekers have <span id="rule-wards"></span> Stealth Wards each: press <kbd>W</kbd> to place one at the cursor.</li>
+          <li><span id="rule-wards"></span> Press <kbd>W</kbd> to place a Stealth Ward at the cursor. A seeker's ward helps catch hiders; a hider's ward only shows the hiders where the seekers are.</li>
           <li>The team that catches the larger share of hiders wins; on a tie, the faster team.</li>
           <li><kbd>Right-click</kbd> move · <kbd>Drag</kbd> pan · <kbd>Wheel</kbd> zoom · <kbd>Y</kbd> lock camera · <kbd>Space</kbd> center · On touch: tap to move.</li>
         </ul>

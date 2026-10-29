@@ -6,7 +6,7 @@
 import { has } from '../vision.js';
 import { SIGHT } from '../config.js';
 import { validChampionId } from './champions.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
 
 export const HOST_ID = 'host';
 
@@ -22,7 +22,7 @@ export class Server {
     this.send = send;
     this.now = now;
     this.players = new Map();
-    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false };
+    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false, seekerWards: RULES.seekerWards, hiderWards: RULES.hiderWards };
     this.phase = 'lobby';
     this.round = 0;
     this.endsAt = 0;
@@ -70,6 +70,8 @@ export class Server {
       if (HIDE_CHOICES.includes(m.hide)) this.settings.hide = m.hide;
       if (SEEK_CHOICES.includes(m.seek)) this.settings.seek = m.seek;
       if (typeof m.training === 'boolean') this.settings.training = m.training;
+      if (WARD_CHOICES.includes(m.seekerWards)) this.settings.seekerWards = m.seekerWards;
+      if (WARD_CHOICES.includes(m.hiderWards)) this.settings.hiderWards = m.hiderWards;
       this.broadcastRoom();
     } else if (m.t === 'pos') {
       if (!(this.phase === 'hide' || this.phase === 'seek') || p.caught) return;
@@ -77,14 +79,16 @@ export class Server {
       const x = Number(m.x), z = Number(m.z);
       if (Number.isFinite(x) && Number.isFinite(z)) { p.x = x; p.z = z; }
     } else if (m.t === 'ward') {
-      if (this.phase !== 'seek' || p.team !== this.seekTeam || p.wards <= 0) return;
+      // Hiders may ward from the hide phase on; seekers once they are released.
+      const seeker = p.team === this.seekTeam;
+      if (p.wards <= 0 || p.caught || !(this.phase === 'seek' || (this.phase === 'hide' && !seeker))) return;
       const x = Number(m.x), z = Number(m.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
       if (Math.hypot(x - p.x, z - p.z) > RULES.wardRange + 100) return;
       const spot = this.grid.nearestWalkable(x, z, p.team);
       if (!spot) return;
       p.wards--;
-      this.wards.push({ owner: id, x: spot.x, z: spot.z });
+      this.wards.push({ owner: id, team: p.team, x: spot.x, z: spot.z });
     } else if (m.t === 'lobby' && id === HOST_ID && this.phase === 'results') {
       this.toLobby();
     }
@@ -165,7 +169,7 @@ export class Server {
         const s = this.grid.nearestWalkable(c.x + r * Math.cos(a), c.z + r * Math.sin(a), team) || c;
         p.x = s.x; p.z = s.z;
         p.caught = false; p.spot = 0; p.caughtAt = null; p.caughtBy = null; p.spotted = 0;
-        p.wards = team === this.seekTeam ? RULES.wardsPerSeeker : 0;
+        p.wards = team === this.seekTeam ? this.settings.seekerWards : this.settings.hiderWards;
         p.catches = 0;
         spawns[p.id] = { x: s.x, z: s.z };
       });
@@ -262,7 +266,8 @@ export class Server {
 
   seekerSources() {
     const list = this.seekers().map((p) => ({ x: p.x, z: p.z, sight: SIGHT.champion, owner: p.id }));
-    for (const w of this.wards) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth, owner: w.owner });
+    // Hiders' wards only give their own team vision; they never catch anyone.
+    for (const w of this.wards) if (w.team === this.seekTeam) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth, owner: w.owner });
     return list;
   }
 

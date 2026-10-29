@@ -140,10 +140,15 @@ test('only the host changes settings, and only to listed values', () => {
   room.join(HOST_ID); room.join('p1');
   room.send('p1', { t: 'settings', hide: 20 });
   assert.equal(room.server.settings.hide, RULES.hide);
-  room.send(HOST_ID, { t: 'settings', hide: 20, seek: 300, training: true });
-  assert.deepEqual(room.server.settings, { hide: 20, seek: 300, training: true });
-  room.send(HOST_ID, { t: 'settings', hide: 25, seek: 1, training: 'yes' });
-  assert.deepEqual(room.server.settings, { hide: 20, seek: 300, training: true });
+  assert.equal(room.server.settings.seekerWards, 2, 'seekers get 2 wards by default');
+  assert.equal(room.server.settings.hiderWards, 0, 'hiders get none by default');
+  room.send(HOST_ID, { t: 'settings', hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1 });
+  const set = { hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1 };
+  assert.deepEqual(room.server.settings, set);
+  room.send(HOST_ID, { t: 'settings', hide: 25, seek: 1, training: 'yes', seekerWards: 9, hiderWards: -1 });
+  assert.deepEqual(room.server.settings, set);
+  room.send('p1', { t: 'settings', seekerWards: 0, hiderWards: 3 });
+  assert.deepEqual(room.server.settings, set);
 });
 
 test('the game needs two players, both teams and everyone ready', () => {

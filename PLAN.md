@@ -123,8 +123,11 @@ where the fog hides people.
    Each round has two phases:
    - **Hide** (40 s by default): hiders leave their fountain and look for a
      spot. Seekers are held in their own fountain.
-   - **Seek** (3 min by default): seekers hunt. Each seeker has 2 Stealth
-     Wards to place (W, at the cursor, 600 range like the trinket).
+   - **Seek** (3 min by default): seekers hunt.
+   - **Wards** (W, at the cursor, 600 range like the trinket): the host sets
+     Stealth Wards per seeker (default 2) and per hider (default 0, up to 5
+     each). Hiders can ward from the hide phase on, seekers once released. A
+     hider's ward only gives the hiders vision; it never spots anyone.
 3. **Catching.** A hider is caught after being **in the seeking team's vision
    for 2 s in a row** (the meter drains at the same rate when they break
    sight). Same vision rules as section 2: brush hides you unless a seeker or
@@ -190,7 +193,7 @@ Message flow (JSON over one reliable data channel per player):
 ### Later
 
 - Host picks the dragon / Baron terrain for the match.
-- Hider tools (one Stealth Ward, or a Sweeping Lens for seekers).
+- More tools (a Sweeping Lens for seekers to clear hider wards).
 - Per-team filtered snapshots, reconnect after a dropped connection, host
   migration.
 - Replay at the end of a round showing each hider's path over the seekers'

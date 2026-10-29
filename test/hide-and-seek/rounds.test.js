@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES, FOUNTAIN, seekerOf, otherTeam } from '../../src/hideseek/rules.js';
-import { startedRoom, hideSeekGrid, HOST_ID, at } from '../helpers.js';
+import { startedRoom, makeRoom, hideSeekGrid, HOST_ID, at } from '../helpers.js';
 
 const HIDE = RULES.hide, SEEK = RULES.seek;
 
@@ -33,10 +33,35 @@ test('round 1 starts in the hide phase with everyone at their fountain', () => {
   assert.notDeepEqual([r1.x, r1.z], [r2.x, r2.z], 'teammates are spread out');
 });
 
-test('seekers get their wards, hiders none', () => {
+test('by default seekers get 2 wards and hiders none', () => {
   const room = startedRoom([['r1', 'red']]);
-  assert.equal(room.player(HOST_ID).wards, RULES.wardsPerSeeker);
+  assert.equal(room.player(HOST_ID).wards, 2);
   assert.equal(room.player('r1').wards, 0);
+});
+
+// A started room after the host picked ward counts in the lobby.
+function wardRoom(seekerWards, hiderWards, players = [['r1', 'red']]) {
+  const room = makeRoom();
+  room.join(HOST_ID, 'Host', 'blue');
+  for (const [id, team] of players) room.join(id, id, team);
+  room.send(HOST_ID, { t: 'settings', seekerWards, hiderWards });
+  room.ready(HOST_ID, ...players.map(([id]) => id));
+  room.advance(3.1);
+  return room;
+}
+
+test('the host\'s ward counts are handed out each round', () => {
+  const room = wardRoom(4, 1);
+  assert.equal(room.player(HOST_ID).wards, 4);
+  assert.equal(room.player('r1').wards, 1);
+  room.move('r1', 5000, 5000);
+  toSeek(room);
+  room.move(HOST_ID, 5000, 5600);
+  room.advance(2.2);
+  room.advance(RULES.roundBreak + 0.1);
+  assert.equal(room.server.round, 2);
+  assert.equal(room.player('r1').wards, 4, 'Red seeks now');
+  assert.equal(room.player(HOST_ID).wards, 1, 'Blue hides now');
 });
 
 test('seekers are held in their fountain during the hide phase', () => {
@@ -160,15 +185,60 @@ test('seekers can place up to two wards in range during the seek phase', () => {
   room.send(HOST_ID, { t: 'ward', x: 5300, z: 5000 });
   room.send(HOST_ID, { t: 'ward', x: 5000, z: 5300 });
   room.send(HOST_ID, { t: 'ward', x: 4700, z: 5000 });
-  assert.deepEqual(room.server.wards, [{ owner: HOST_ID, x: 5300, z: 5000 }, { owner: HOST_ID, x: 5000, z: 5300 }]);
+  assert.deepEqual(room.server.wards, [{ owner: HOST_ID, team: 'blue', x: 5300, z: 5000 }, { owner: HOST_ID, team: 'blue', x: 5000, z: 5300 }]);
   assert.equal(host.wards, 0);
 });
 
-test('hiders cannot place wards', () => {
+test('with the default settings hiders cannot place wards', () => {
   const room = startedRoom([['r1', 'red']]);
   toSeek(room);
   room.move('r1', 5000, 5000);
-  room.player('r1').wards = 2; // even if they somehow had some
+  room.send('r1', { t: 'ward', x: 5100, z: 5000 });
+  assert.equal(room.server.wards.length, 0);
+});
+
+test('a seeker with 0 wards set by the host cannot place any', () => {
+  const room = wardRoom(0, 0);
+  toSeek(room);
+  room.move(HOST_ID, 5000, 5000);
+  room.send(HOST_ID, { t: 'ward', x: 5100, z: 5000 });
+  assert.equal(room.server.wards.length, 0);
+});
+
+test('hiders with wards can place them from the hide phase on', () => {
+  const room = wardRoom(2, 2);
+  room.move('r1', 5000, 5000);
+  room.send('r1', { t: 'ward', x: 5200, z: 5000 });
+  assert.deepEqual(room.server.wards, [{ owner: 'r1', team: 'red', x: 5200, z: 5000 }]);
+  toSeek(room);
+  room.send('r1', { t: 'ward', x: 5000, z: 5200 });
+  room.send('r1', { t: 'ward', x: 4800, z: 5000 });
+  assert.equal(room.server.wards.length, 2, 'only as many as the host allowed');
+  assert.equal(room.player('r1').wards, 0);
+});
+
+test('a hider\'s ward never spots or catches anyone', () => {
+  const room = wardRoom(2, 1, [['r1', 'red'], ['r2', 'red']]);
+  room.move('r1', 5000, 5000);
+  room.move('r2', 5300, 5000);
+  room.send('r1', { t: 'ward', x: 5100, z: 5000 });
+  toSeek(room);
+  room.advance(4);
+  assert.equal(room.player('r1').spot, 0);
+  assert.equal(room.player('r2').spot, 0);
+  assert.equal(room.player('r1').caught, false);
+  assert.equal(room.player('r2').caught, false);
+});
+
+test('caught hiders cannot place their remaining wards', () => {
+  const room = wardRoom(2, 1, [['r1', 'red'], ['r2', 'red']]);
+  room.move('r1', 5000, 5000);
+  room.move('r2', 12000, 3000); // far away, so the round goes on
+  toSeek(room);
+  room.move(HOST_ID, 5000, 5600);
+  room.advance(2.2);
+  assert.equal(room.player('r1').caught, true);
+  assert.equal(room.server.phase, 'seek');
   room.send('r1', { t: 'ward', x: 5100, z: 5000 });
   assert.equal(room.server.wards.length, 0);
 });
@@ -229,7 +299,7 @@ test('catching every hider ends the round early, then a break, then roles swap',
   assert.equal(room.server.round, 2);
   assert.equal(room.server.seekTeam, 'red');
   assert.equal(room.player('r1').caught, false, 'everyone is free again');
-  assert.equal(room.player('r1').wards, RULES.wardsPerSeeker);
+  assert.equal(room.player('r1').wards, 2);
   assert.equal(room.player(HOST_ID).wards, 0);
   assert.equal(room.server.wards.length, 0);
   const c = FOUNTAIN.red;
