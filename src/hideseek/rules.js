@@ -10,7 +10,12 @@ export const RULES = {
   hiderWards: 0, // Stealth Wards per hider, host can change it in the lobby
   wardRange: 600, // like the trinket: placed at the cursor, up to this far
   roundBreak: 8, // summary between the two rounds
+  speed: 345, // move speed, like a champion with no boots
+  hideSpeed: 500, // move speed during the hide phase, so hiders get away fast
 };
+
+// Move speed for a phase. Only hiders move during the hide phase.
+export const moveSpeed = (phase) => (phase === 'hide' ? RULES.hideSpeed : RULES.speed);
 
 export const HIDE_CHOICES = [20, 30, 40, 60];
 export const SEEK_CHOICES = [90, 120, 180, 240, 300];

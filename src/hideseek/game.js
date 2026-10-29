@@ -7,8 +7,8 @@ import { NavGrid } from '../grid.js';
 import { Vision, has } from '../vision.js';
 import { findPath } from '../path.js';
 import { blur } from '../blur.js';
-import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
+import { SIGHT, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT, moveSpeed } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl, searchKey } from './champions.js';
@@ -865,7 +865,7 @@ function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (path.length && canMove() && !rooted()) {
-    let budget = DEFAULT_MOVE_SPEED * (now < me.surgeUntil ? SPELLS.Fighter.speed : 1) * dt;
+    let budget = moveSpeed(game.phase) * (now < me.surgeUntil ? SPELLS.Fighter.speed : 1) * dt;
     while (budget > 0 && path.length) {
       const p = path[0];
       const d = Math.hypot(p.x - me.x, p.z - me.z);

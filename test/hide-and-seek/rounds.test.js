@@ -2,13 +2,19 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { RULES, FOUNTAIN, seekerOf, otherTeam } from '../../src/hideseek/rules.js';
+import { RULES, FOUNTAIN, seekerOf, otherTeam, moveSpeed } from '../../src/hideseek/rules.js';
 import { startedRoom, makeRoom, hideSeekGrid, HOST_ID, at } from '../helpers.js';
 
 const HIDE = RULES.hide, SEEK = RULES.seek;
 
 // From the start of round 1's hide phase to its seek phase.
 function toSeek(room) { room.advance(HIDE + 0.1); }
+
+test('players move at 500 during the hide phase and 345 otherwise', () => {
+  assert.equal(moveSpeed('hide'), 500);
+  assert.equal(moveSpeed('seek'), 345);
+  assert.equal(moveSpeed('lobby'), 345);
+});
 
 test('Blue seeks in round 1 and Red in round 2', () => {
   assert.equal(seekerOf(1), 'blue');
