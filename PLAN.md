@@ -129,7 +129,7 @@ where the fog hides people.
      each). Hiders can ward from the hide phase on, seekers once released. A
      hider's ward only gives the hiders vision; it never spots anyone.
 3. **Catching.** A hider is caught after being **in the seeking team's vision
-   for 2 s in a row** (the meter drains at the same rate when they break
+   for 2 s in a row** (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
    sight). Same vision rules as section 2: brush hides you unless a seeker or
    ward is in that brush, walls block sight. There is no tagging by contact:
    both teams move at 345, so a chase would never end, and the point of the

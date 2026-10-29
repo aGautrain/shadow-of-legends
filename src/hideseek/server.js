@@ -6,7 +6,7 @@
 import { has } from '../vision.js';
 import { SIGHT } from '../config.js';
 import { validChampionId } from './champions.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
 
 export const HOST_ID = 'host';
 
@@ -22,7 +22,7 @@ export class Server {
     this.send = send;
     this.now = now;
     this.players = new Map();
-    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false, seekerWards: RULES.seekerWards, hiderWards: RULES.hiderWards };
+    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false, seekerWards: RULES.seekerWards, hiderWards: RULES.hiderWards, catchTime: RULES.catchTime };
     this.phase = 'lobby';
     this.round = 0;
     this.endsAt = 0;
@@ -72,6 +72,7 @@ export class Server {
       if (typeof m.training === 'boolean') this.settings.training = m.training;
       if (WARD_CHOICES.includes(m.seekerWards)) this.settings.seekerWards = m.seekerWards;
       if (WARD_CHOICES.includes(m.hiderWards)) this.settings.hiderWards = m.hiderWards;
+      if (CATCH_CHOICES.includes(m.catchTime)) this.settings.catchTime = m.catchTime;
       this.broadcastRoom();
     } else if (m.t === 'pos') {
       if (!(this.phase === 'hide' || this.phase === 'seek') || p.caught) return;
@@ -282,7 +283,7 @@ export class Server {
       const seen = has(bits, cell);
       h.spot = Math.max(0, h.spot + (seen ? dt : -dt));
       if (seen) h.spotted += dt;
-      if (h.spot < RULES.catchTime) continue;
+      if (h.spot < this.settings.catchTime) continue;
       h.caught = true;
       h.caughtAt = t;
       // Credit the closest source that sees the hider.
@@ -301,7 +302,7 @@ export class Server {
 
   snapshot() {
     const ms = Math.max(0, this.endsAt - this.now());
-    const p = [...this.players.values()].map((q) => [q.id, Math.round(q.x), Math.round(q.z), q.caught ? 1 : 0, round2(Math.min(q.spot, RULES.catchTime)), q.wards]);
+    const p = [...this.players.values()].map((q) => [q.id, Math.round(q.x), Math.round(q.z), q.caught ? 1 : 0, round2(Math.min(q.spot, this.settings.catchTime)), q.wards]);
     const w = this.wards.map((x) => [x.owner, Math.round(x.x), Math.round(x.z)]);
     this.broadcast({ t: 'snap', ms, p, w });
   }

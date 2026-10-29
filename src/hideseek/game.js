@@ -6,7 +6,7 @@ import { Vision, has } from '../vision.js';
 import { findPath } from '../path.js';
 import { blur } from '../blur.js';
 import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl } from './champions.js';
@@ -171,9 +171,11 @@ const isHost = () => myId === HOST_ID;
 
 for (const s of HIDE_CHOICES) $('set-hide').add(new Option(`${s} s`, s));
 for (const s of SEEK_CHOICES) $('set-seek').add(new Option(s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s / 60} min`, s));
-$('rule-catch').textContent = RULES.catchTime;
+for (const s of CATCH_CHOICES) $('set-catch').add(new Option(`${s} s`, s));
+// The host's catch delay once known, else the default.
+const catchTime = () => (game.settings || (room && room.settings) || RULES).catchTime;
 for (const id of ['set-seeker-wards', 'set-hider-wards']) for (const n of WARD_CHOICES) $(id).add(new Option(String(n), n));
-const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-seeker-wards', 'set-hider-wards', 'set-training'];
+const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-training'];
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function renderLobby() {
@@ -203,6 +205,8 @@ function renderLobby() {
   const s = room.settings;
   $('set-hide').value = s.hide;
   $('set-seek').value = s.seek;
+  $('set-catch').value = s.catchTime;
+  $('rule-catch').textContent = s.catchTime;
   $('set-seeker-wards').value = s.seekerWards;
   $('set-hider-wards').value = s.hiderWards;
   $('set-training').checked = s.training;
@@ -311,6 +315,7 @@ $('lobby-name').addEventListener('input', () => {
 });
 const sendSettings = () => send({
   t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked,
+  catchTime: Number($('set-catch').value),
   seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value),
 });
 for (const id of SETTING_INPUTS) $(id).addEventListener('change', sendSettings);
@@ -568,7 +573,7 @@ function drawChampion(x0, z0, p, s, isMe) {
   } else if (s.spot > 0) {
     // spotted meter around the champion
     ctx.strokeStyle = '#ff5a64'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(x, y, r + 6, -Math.PI / 2, -Math.PI / 2 + (2 * Math.PI * s.spot) / RULES.catchTime); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, r + 6, -Math.PI / 2, -Math.PI / 2 + (2 * Math.PI * s.spot) / catchTime()); ctx.stroke();
   }
   ctx.globalAlpha = 1;
   ctx.font = '600 12px system-ui, sans-serif';
@@ -608,7 +613,7 @@ function renderHud() {
   const showMeter = game.phase === 'seek' && !isSeeker() && !me.caught && me.spot > 0;
   $('meter').hidden = !showMeter;
   if (showMeter) {
-    const pct = Math.min(100, Math.round((100 * me.spot) / RULES.catchTime));
+    const pct = Math.min(100, Math.round((100 * me.spot) / catchTime()));
     $('meter').firstChild.style.width = pct + '%';
     $('meter').lastChild.textContent = `Spotted ${pct}%`;
   }

@@ -103,6 +103,24 @@ test('a hider in the seekers\' vision is caught after 2 s in a row', () => {
   assert.deepEqual(room.last('r1', 'caught'), { t: 'caught', id: 'r1', by: HOST_ID });
 });
 
+test('the host\'s catch delay replaces the 2 s default', () => {
+  for (const catchTime of [0.5, 4]) {
+    const room = makeRoom();
+    room.join(HOST_ID, 'Host', 'blue');
+    room.join('r1', 'r1', 'red');
+    room.send(HOST_ID, { t: 'settings', catchTime });
+    room.ready(HOST_ID, 'r1');
+    room.advance(3.1);
+    room.move('r1', 5000, 5000);
+    toSeek(room);
+    room.move(HOST_ID, 5000, 5600);
+    room.advance(catchTime - 0.2);
+    assert.equal(room.player('r1').caught, false, `not yet at ${catchTime - 0.2} s`);
+    room.advance(0.4);
+    assert.equal(room.player('r1').caught, true, `caught just after ${catchTime} s`);
+  }
+});
+
 test('leaving vision drains the meter instead of resetting it', () => {
   const room = startedRoom([['r1', 'red']]);
   room.move('r1', 5000, 5000);

@@ -142,12 +142,13 @@ test('only the host changes settings, and only to listed values', () => {
   assert.equal(room.server.settings.hide, RULES.hide);
   assert.equal(room.server.settings.seekerWards, 2, 'seekers get 2 wards by default');
   assert.equal(room.server.settings.hiderWards, 0, 'hiders get none by default');
-  room.send(HOST_ID, { t: 'settings', hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1 });
-  const set = { hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1 };
+  assert.equal(room.server.settings.catchTime, 2, 'caught after 2 s by default');
+  room.send(HOST_ID, { t: 'settings', hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1, catchTime: 3 });
+  const set = { hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1, catchTime: 3 };
   assert.deepEqual(room.server.settings, set);
-  room.send(HOST_ID, { t: 'settings', hide: 25, seek: 1, training: 'yes', seekerWards: 9, hiderWards: -1 });
+  room.send(HOST_ID, { t: 'settings', hide: 25, seek: 1, training: 'yes', seekerWards: 9, hiderWards: -1, catchTime: 0 });
   assert.deepEqual(room.server.settings, set);
-  room.send('p1', { t: 'settings', seekerWards: 0, hiderWards: 3 });
+  room.send('p1', { t: 'settings', seekerWards: 0, hiderWards: 3, catchTime: 1 });
   assert.deepEqual(room.server.settings, set);
 });
 
