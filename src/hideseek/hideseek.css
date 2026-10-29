@@ -85,7 +85,28 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .champ-grid button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; font-size: 10.5px;
   line-height: 1.2; background: transparent; border-color: transparent; }
 .champ-grid button img { width: 48px; height: 48px; border-radius: 6px; display: block; }
-.champ-grid button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.champ-grid button .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.champ-grid button .pic { position: relative; display: block; }
+
+/* Fantasy category badges: on champion tiles, over avatars, on the spell card. */
+.cls { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; flex: none;
+  background: #0b0f14; border: 1px solid var(--cls); color: var(--cls); }
+.cls svg { width: 70%; height: 70%; fill: currentColor; }
+.cls.on-tile { position: absolute; right: -5px; bottom: -4px; }
+.cls.on-av { position: absolute; right: -6px; top: -7px; width: 15px; height: 15px; }
+.cls.big { width: 36px; height: 36px; border-width: 2px; }
+.no-fantasy .cls { display: none; }
+.avw { position: relative; display: inline-block; flex: none; line-height: 0; margin-right: 4px; }
+
+.spell-card { margin: 2px 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(24, 33, 46, 0.6); }
+.spell-card .sc-head { display: flex; gap: 10px; align-items: center; }
+.spell-card .sc-head strong { font-size: 15px; }
+.spell-card .sc-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; font-size: 12.5px; }
+.spell-card .sc-stats em { font-style: normal; color: var(--muted); margin-right: 3px; }
+.spell-card .sc-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.spell-card h3 { margin: 0 0 2px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
+.spell-card p { margin: 0; font-size: 13px; }
+@media (max-width: 560px) { .spell-card .sc-roles { grid-template-columns: 1fr; } }
 .champ-grid button.picked { border-color: var(--gold); background: #2a2516; }
 .champ-grid button.taken { opacity: 0.3; filter: grayscale(1); }
 .champ-grid .empty { grid-column: 1 / -1; color: var(--muted); }

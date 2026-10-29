@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES } from '../../src/hideseek/rules.js';
-import { SPELLS, categoryOf, blinkTarget } from '../../src/hideseek/spells.js';
+import { SPELLS, categoryOf, blinkTarget, spellStats } from '../../src/hideseek/spells.js';
 import { makeRoom, openGrid, at, HOST_ID } from '../helpers.js';
 
 const HIDE = RULES.hide;
@@ -43,6 +43,16 @@ test('the spells have the agreed numbers', () => {
   assert.equal(SPELLS.Marksman.range, 3000); assert.equal(SPELLS.Marksman.radius, 500); assert.equal(SPELLS.Marksman.duration, 4);
   assert.equal(SPELLS.Marksman.cooldown, 45);
   assert.equal(SPELLS.Support.radius, 900); assert.equal(SPELLS.Support.cooldown, 40);
+});
+
+test('each spell explains itself for hiders and seekers, with its numbers', () => {
+  for (const sp of Object.values(SPELLS)) {
+    assert.ok(sp.text && sp.hider && sp.seeker, sp.name);
+    assert.deepEqual(spellStats(sp)[0], ['Cooldown', `${sp.cooldown} s`]);
+  }
+  assert.deepEqual(spellStats(SPELLS.Tank), [['Cooldown', '40 s'], ['Radius', '1000'], ['Root', '1.5 s']]);
+  assert.deepEqual(spellStats(SPELLS.Fighter), [['Cooldown', '25 s'], ['Speed', '+40%'], ['Duration', '3 s']]);
+  assert.deepEqual(spellStats(SPELLS.Marksman), [['Cooldown', '45 s'], ['Range', '3000'], ['Radius', '500'], ['Duration', '4 s']]);
 });
 
 test('the room message tells each player\'s category', () => {

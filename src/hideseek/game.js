@@ -10,7 +10,8 @@ import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, 
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl } from './champions.js';
-import { SPELLS, categoryOf, clampRange, blinkTarget } from './spells.js';
+import { SPELLS, categoryOf, clampRange, blinkTarget, spellStats } from './spells.js';
+import { categoryIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('map');
@@ -250,9 +251,14 @@ const champById = new Map();
 const categories = new Map(); // champion id -> Fantasy category, read by the host's server
 const iconImages = new Map(); // id -> Image, for drawing on the map
 
+const fantasyOn = () => !!(room && room.settings.fantasy);
+
+// Champion portrait, with its Fantasy category badge on top when Fantasy is on.
 function avatar(p) {
   const c = p && champById.get(p.champion);
-  return c ? `<img class="av" src="${c.icon}" alt="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}">` : '';
+  if (!c) return '';
+  const img = `<img class="av" src="${c.icon}" alt="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}">`;
+  return fantasyOn() && p.category ? `<span class="avw">${img}${categoryIcon(p.category, 'on-av')}</span>` : img;
 }
 
 function iconImage(id) {
@@ -276,7 +282,8 @@ loadChampions().then((list) => {
   for (const c of list) { champById.set(c.id, c); const cat = categoryOf(c.tags); if (cat) categories.set(c.id, cat); }
   if (server) server.broadcastRoom();
   $('champ-grid').innerHTML = list.length
-    ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48"><span>${escapeHtml(c.name)}</span></button>`).join('')
+    ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><span class="pic"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48">`
+      + `${categoryIcon(categoryOf(c.tags), 'on-tile')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`).join('')
     : '<p class="empty">Could not load the champion list from Riot\'s servers. Reload the page to try again: a champion is needed to be ready.</p>';
   filterChampions();
   if (room) { renderLobby(); renderBoard(); }
@@ -292,9 +299,22 @@ function renderChampions() {
     b.disabled = !!by;
     b.title = by ? `${name} (picked by ${by})` : name;
   }
-  const sp = room && room.settings.fantasy && spellOf(playerById(myId));
-  $('champ-note').textContent = mine && champById.has(mine)
-    ? `· ${champById.get(mine).name}${sp ? ` · ${playerById(myId).category}, spell: ${sp.name}` : ''}` : '· pick one to be ready';
+  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one to be ready';
+  $('champ-box').classList.toggle('no-fantasy', !fantasyOn());
+  renderSpellCard();
+}
+
+// Your champion's Fantasy spell: what it does when you hide and when you seek.
+function renderSpellCard() {
+  const p = playerById(myId);
+  const sp = fantasyOn() && spellOf(p);
+  $('spell-card').hidden = !sp;
+  if (!sp) return;
+  const html = `<div class="sc-head">${categoryIcon(p.category, 'big')}<div><strong>${sp.name}</strong>`
+    + ` <span class="muted">· ${p.category} spell · <kbd>E</kbd></span><div>${sp.text}</div></div></div>`
+    + `<div class="sc-stats">${spellStats(sp).map(([k, v]) => `<span><em>${k}</em> ${v}</span>`).join('')}</div>`
+    + `<div class="sc-roles"><div><h3>As a hider</h3><p>${sp.hider}</p></div><div><h3>As a seeker</h3><p>${sp.seeker}</p></div></div>`;
+  if ($('spell-card').innerHTML !== html) $('spell-card').innerHTML = html;
 }
 
 function filterChampions() {
