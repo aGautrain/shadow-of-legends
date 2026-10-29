@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Assets, data and src live at the site root, shared by every mode. -->
+  <base href="../">
+  <title>Pedagogic · Shadow of Legends</title>
+  <meta name="description" content="Walk Summoner's Rift and see live what the enemy team can see.">
+  <link rel="stylesheet" href="src/style.css">
+</head>
+<body class="loading">
+  <canvas id="map" aria-label="Summoner's Rift map"></canvas>
+
+  <div id="status" class="status">Loading map…</div>
+
+  <button id="ruler" class="ruler" title="Measure a distance in game units (R). Drag on the map; hold Shift to start from your champion.">📏 Ruler</button>
+
+  <button id="toggle-panel" class="panel-toggle" title="Show or hide the panel">☰</button>
+
+  <aside id="panel">
+    <header>
+      <a class="back" href="./">← All modes</a>
+      <h1>Shadow of Legends</h1>
+      <p class="sub">Pedagogic mode · Fog of war trainer for Summoner's Rift</p>
+    </header>
+
+    <section>
+      <h2>Place</h2>
+      <div class="tools">
+        <button data-tool="select" class="active">Select / drag</button>
+        <button data-tool="erase">Erase</button>
+        <button data-tool="enemy:champion" class="enemy">Enemy champion</button>
+        <button data-tool="enemy:stealth" class="enemy">Enemy Stealth Ward</button>
+        <button data-tool="enemy:control" class="enemy">Enemy Control Ward</button>
+        <button data-tool="enemy:farsight" class="enemy">Enemy Farsight Ward</button>
+        <button data-tool="ally:champion" class="ally">Ally champion</button>
+        <button data-tool="ally:stealth" class="ally">Ally Stealth Ward</button>
+      </div>
+      <p class="hint">Click a turret to mark it destroyed.</p>
+    </section>
+
+    <section>
+      <h2>Show</h2>
+      <label><input type="checkbox" id="view-enemy"> Enemy vision <span class="swatch red"></span></label>
+      <label><input type="checkbox" id="view-fog"> My team's fog <span class="swatch dark"></span></label>
+      <label><input type="checkbox" id="view-rings"> Enemy sight radius</label>
+      <label><input type="checkbox" id="view-grid"> Walls and brush grid</label>
+      <label><input type="checkbox" id="follow"> Lock camera (Y)</label>
+    </section>
+
+    <section>
+      <h2>You</h2>
+      <label class="row">Side
+        <select id="side"><option value="blue">Blue</option><option value="red">Red</option></select>
+      </label>
+      <label class="row">Move speed <input id="speed" type="number" min="100" max="1000" step="5"></label>
+      <div class="presets">
+        <button data-speed="330">330</button>
+        <button data-speed="345">345</button>
+        <button data-speed="370">+25 boots</button>
+        <button data-speed="390">+45 boots</button>
+      </div>
+      <p id="exposure" class="exposure"></p>
+      <button id="reset-exposure" class="link">Reset counter</button>
+    </section>
+
+    <section>
+      <h2>Sight radius</h2>
+      <div id="sight-inputs"></div>
+      <p class="hint">Game units, center to center. Defaults are the wiki values.</p>
+      <label class="row">Fog edge softness <input id="fog-edge" type="number" min="0" max="1000" step="25"></label>
+      <p class="hint">Width of the fade at the vision edge, in game units. Visual only; 0 = hard edge.</p>
+      <button id="sight-reset" class="link">Reset to game values</button>
+    </section>
+
+    <section>
+      <h2>Map</h2>
+      <label class="row">Dragon <select id="dragon"></select></label>
+      <label class="row">Baron <select id="baron"></select></label>
+      <label class="row">Atakhan <select id="atakhan"></select></label>
+    </section>
+
+    <section class="actions">
+      <button id="share">Copy share link</button>
+      <button id="default">Load example</button>
+      <button id="clear">Remove all</button>
+    </section>
+
+    <section class="help">
+      <p><kbd>Right-click</kbd> move · <kbd>Wheel</kbd> zoom · <kbd>Drag</kbd> pan · <kbd>Space</kbd> center · <kbd>R</kbd> ruler · <kbd>S</kbd> stop · <kbd>Del</kbd> remove hovered · On touch: tap to move</p>
+      <label class="row">Map data <select id="patch"></select></label>
+      <p>Map: Summoner's Rift navgrid. Default sight: champion 1350, wards 900, Farsight 500, turret 1350. <a href="https://github.com/aGautrain/shadow-of-legends">Source and plan</a></p>
+      <p class="legal">Shadow of Legends isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+    </section>
+  </aside>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

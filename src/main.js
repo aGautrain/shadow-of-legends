@@ -90,7 +90,7 @@ function saveHash() {
     e: state.fogEdge,
     r: Object.keys(SIGHT).some((k) => state.sight[k] !== SIGHT[k]) ? state.sight : undefined,
   };
-  history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(s)));
+  history.replaceState(null, '', location.pathname + '#' + encodeURIComponent(JSON.stringify(s)));
 }
 let saveTimer = 0;
 const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveHash, 300); };

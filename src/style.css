@@ -74,3 +74,5 @@ kbd { background: #18212e; border: 1px solid var(--line); border-radius: 4px; pa
   body.panel-hidden .panel-toggle { left: auto; }
   .status { top: 8px; font-size: 13px; }
 }
+.back { display: inline-block; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-decoration: none; }
+.back:hover { color: var(--gold); }

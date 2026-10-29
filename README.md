@@ -5,6 +5,9 @@ real map and see, live, what the enemy team can see.
 
 **Play:** https://agautrain.github.io/shadow-of-legends/
 
+The landing page lists the modes. The sim below is the **Pedagogic** mode
+(`pedagogic/`); old share links on the root URL redirect there.
+
 - Right-click to move (real move speed, paths around walls).
 - Place enemy champions and wards; enemy turrets see too (click one to destroy it).
 - Red = enemy vision. Dark = your team's fog. The banner tells you when you are seen, and by what.
@@ -18,7 +21,7 @@ See [PLAN.md](PLAN.md) for the vision rules, data sources and roadmap.
 
 ```sh
 python3 -m http.server
-# open http://localhost:8000
+# open http://localhost:8000 (landing) or http://localhost:8000/pedagogic/
 ```
 
 No build step. Deployed to GitHub Pages by `.github/workflows/pages.yml` on
