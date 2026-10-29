@@ -1,0 +1,753 @@
+// Hide and seek: home, lobby and game screens of one page. The page stays
+// the same from lobby to results so the connection to the host survives.
+
+import { NavGrid } from '../grid.js';
+import { Vision, has } from '../vision.js';
+import { findPath } from '../path.js';
+import { blur } from '../blur.js';
+import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
+import { openHost, openClient, newCode, cleanCode } from './net.js';
+import { Server, HOST_ID } from './server.js';
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('map');
+const ctx = canvas.getContext('2d');
+let needsDraw = true;
+
+const grid = new NavGrid(await (await fetch(PATCHES[0][2])).json());
+const vision = new Vision(grid);
+const MAP = grid.w * grid.cell;
+const bg = new Image();
+bg.src = BACKGROUND.src;
+bg.onload = () => { needsDraw = true; };
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const TEAM_LABEL = { blue: 'Blue', red: 'Red' };
+const teamSpan = (t) => `<span class="${t}-text">${TEAM_LABEL[t]}</span>`;
+const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const secs = (s) => `${Math.round(s)} s`;
+
+// ---------------------------------------------------------------- connection
+
+let link = null; // { send(msg), close() }
+let server = null; // only in the host's browser
+let roomCode = '';
+let myId = null;
+let room = null; // last 'room' message: players, settings, countdown
+
+function showScreen(name) {
+  for (const id of ['home', 'lobby', 'game']) $(id).hidden = id !== name;
+  document.body.classList.toggle('in-game', name === 'game');
+  if (name === 'game') resize();
+}
+
+function homeStatus(text, error = false) {
+  $('home-status').textContent = text;
+  $('home-status').className = 'status-line' + (error ? ' error' : '');
+}
+
+function readName() {
+  const name = $('name').value.trim();
+  if (!name) { homeStatus('Pick a name first.', true); $('name').focus(); return null; }
+  store.set('sol-hs-name', name);
+  return name;
+}
+
+function setBusy(on) { document.querySelectorAll('#home button, #home input').forEach((el) => { el.disabled = on; }); }
+
+function setHash(code) { history.replaceState(null, '', location.pathname + location.search + (code ? '#' + code : '')); }
+
+async function createRoom() {
+  const name = readName();
+  if (!name) return;
+  setBusy(true);
+  homeStatus('Creating the room…');
+  let lastError = null;
+  for (let attempt = 0; attempt < 3 && !link; attempt++) {
+    const code = newCode();
+    let transport = null;
+    const srv = new Server(grid, vision, (id, msg) => {
+      if (id === HOST_ID) { const copy = structuredClone(msg); queueMicrotask(() => onMessage(copy)); }
+      else if (transport) transport.send(id, msg);
+    });
+    try {
+      transport = await openHost(code, {
+        onJoin: (id) => srv.join(id),
+        onMessage: (id, msg) => srv.message(id, msg),
+        onLeave: (id) => srv.leave(id),
+      });
+      server = srv;
+      roomCode = code;
+      link = {
+        send: (msg) => { const copy = structuredClone(msg); queueMicrotask(() => srv.message(HOST_ID, copy)); },
+        close: () => { srv.close(); transport.close(); },
+      };
+    } catch (e) {
+      srv.close();
+      lastError = e;
+    }
+  }
+  setBusy(false);
+  if (!link) { homeStatus(lastError ? lastError.message : 'Could not create the room.', true); return; }
+  setHash(roomCode);
+  link.send({ t: 'hello', name });
+}
+
+async function joinRoom(code) {
+  const name = readName();
+  if (!name) return;
+  code = cleanCode(code);
+  if (code.length !== 5) { homeStatus('Room codes have 5 characters.', true); return; }
+  setBusy(true);
+  homeStatus(`Joining room ${code}…`);
+  try {
+    link = await openClient(code, { onMessage, onClose: () => lost('The connection to the host was lost, so the room closed.') });
+  } catch (e) {
+    setBusy(false);
+    homeStatus(e.message, true);
+    return;
+  }
+  setBusy(false);
+  roomCode = code;
+  setHash(code);
+  link.send({ t: 'hello', name });
+}
+
+function lost(message) {
+  if (link) link.close();
+  link = null; server = null; myId = null; room = null;
+  game.phase = 'lobby';
+  showScreen('home');
+  homeStatus(message, true);
+  syncHome();
+}
+
+function send(msg) { if (link) link.send(msg); }
+
+let lastHeard = 0;
+function onMessage(m) {
+  if (!m || typeof m !== 'object') return;
+  lastHeard = performance.now();
+  if (m.t === 'welcome') { myId = m.id; homeStatus(''); showScreen('lobby'); renderLobby(); }
+  else if (m.t === 'reject') lost(m.reason);
+  else if (m.t === 'room') { room = m; syncCountdown(); if (game.phase === 'lobby') renderLobby(); else renderBoard(); }
+  else if (m.t === 'phase') onPhase(m);
+  else if (m.t === 'snap') onSnap(m);
+  else if (m.t === 'caught') onCaught(m);
+}
+
+// ---------------------------------------------------------------- home
+
+$('name').value = store.get('sol-hs-name') || '';
+function syncHome() {
+  const code = cleanCode(location.hash.slice(1));
+  $('join-box').hidden = code.length !== 5;
+  $('create-box').hidden = code.length === 5;
+  $('join').textContent = `Join room ${code}`;
+}
+$('create').addEventListener('click', createRoom);
+$('join').addEventListener('click', () => joinRoom(location.hash.slice(1)));
+$('join-code').addEventListener('click', () => joinRoom($('code').value));
+$('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom($('code').value); });
+$('name').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (!$('join-box').hidden) joinRoom(location.hash.slice(1)); else createRoom();
+});
+$('leave-code').addEventListener('click', () => { setHash(''); syncHome(); homeStatus(''); });
+window.addEventListener('hashchange', () => { if (!link) syncHome(); });
+
+// ---------------------------------------------------------------- lobby
+
+const playerList = () => (room ? room.players : []);
+const playerById = (id) => playerList().find((p) => p.id === id);
+const myTeam = () => (playerById(myId) || {}).team;
+const isHost = () => myId === HOST_ID;
+
+for (const s of HIDE_CHOICES) $('set-hide').add(new Option(`${s} s`, s));
+for (const s of SEEK_CHOICES) $('set-seek').add(new Option(s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s / 60} min`, s));
+$('rule-catch').textContent = RULES.catchTime;
+$('rule-wards').textContent = RULES.wardsPerSeeker;
+
+function renderLobby() {
+  if (!room || !myId) return;
+  $('room-code').textContent = roomCode;
+  const me = playerById(myId);
+  for (const team of TEAMS) {
+    const list = playerList().filter((p) => p.team === team);
+    $('team-' + team).innerHTML = list.length
+      ? list.map((p) => `<li class="${p.id === myId ? 'me' : ''}"><span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
+        + `${p.id === room.host ? '<span class="badge">host</span>' : ''}`
+        + `${p.ready ? '<span class="ok">✓ ready</span>' : '<span class="wait">not ready</span>'}</li>`).join('')
+      : '<li class="empty">Nobody yet</li>';
+    const btn = document.querySelector(`[data-team="${team}"]`);
+    btn.disabled = me && me.team === team;
+    btn.classList.toggle('mine', !!me && me.team === team);
+    btn.textContent = me && me.team === team ? 'Your team' : `Join ${TEAM_LABEL[team]}`;
+  }
+  if (me && document.activeElement !== $('lobby-name')) $('lobby-name').value = me.name;
+  $('ready').textContent = me && me.ready ? 'Ready ✓' : 'Ready';
+  $('ready').classList.toggle('on', !!(me && me.ready));
+
+  const s = room.settings;
+  $('set-hide').value = s.hide;
+  $('set-seek').value = s.seek;
+  $('set-training').checked = s.training;
+  for (const id of ['set-hide', 'set-seek', 'set-training']) $(id).disabled = !isHost();
+  $('settings-note').textContent = isHost() ? '(you are the host)' : '(set by the host)';
+  lobbyStatus();
+}
+
+function lobbyStatus() {
+  if (!room) return;
+  const el = $('lobby-status');
+  const list = playerList();
+  el.className = 'status-line';
+  if (room.countdown !== null && countdownEnd) {
+    el.className = 'status-line go';
+    el.textContent = `Everyone is ready. Starting in ${Math.max(1, Math.ceil((countdownEnd - performance.now()) / 1000))}…`;
+  } else if (list.length < 2 || !TEAMS.every((t) => list.some((p) => p.team === t))) {
+    el.textContent = 'Waiting for players: each team needs at least one. Share the invite link.';
+  } else {
+    const waiting = list.filter((p) => !p.ready).map((p) => p.name);
+    el.textContent = `Waiting for ${waiting.join(', ')} to be ready.`;
+  }
+}
+// The countdown arrives as time left; keep it as a local deadline.
+let countdownEnd = 0;
+const syncCountdown = () => { countdownEnd = room && room.countdown !== null ? performance.now() + room.countdown : 0; };
+
+document.querySelectorAll('[data-team]').forEach((b) => b.addEventListener('click', () => send({ t: 'set', team: b.dataset.team })));
+$('ready').addEventListener('click', () => { const me = playerById(myId); send({ t: 'set', ready: !(me && me.ready) }); });
+let nameTimer = 0;
+$('lobby-name').addEventListener('input', () => {
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => {
+    const name = $('lobby-name').value.trim();
+    if (name) { store.set('sol-hs-name', name); send({ t: 'set', name }); }
+  }, 350);
+});
+const sendSettings = () => send({ t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked });
+for (const id of ['set-hide', 'set-seek', 'set-training']) $(id).addEventListener('change', sendSettings);
+$('copy-link').addEventListener('click', async () => {
+  const url = location.origin + location.pathname + location.search + '#' + roomCode;
+  try { await navigator.clipboard.writeText(url); $('copy-link').textContent = 'Link copied'; }
+  catch { $('copy-link').textContent = url; }
+  setTimeout(() => { $('copy-link').textContent = 'Copy invite link'; }, 2000);
+});
+
+// ---------------------------------------------------------------- game state
+
+const game = { phase: 'lobby', round: 0, seekTeam: null, endsAt: 0, results: [], winner: null, settings: null };
+const me = { x: 0, z: 0, caught: false, spot: 0, wards: 0 };
+const others = new Map(); // id -> { x, z, tx, tz, caught, spot }
+let wards = []; // [{ owner, x, z }]
+let path = [];
+
+const isSeeker = () => myTeam() === game.seekTeam;
+const playing = () => game.phase === 'hide' || game.phase === 'seek';
+const spectating = () => !playing() || me.caught;
+const canMove = () => !me.caught && (game.phase === 'seek' || (game.phase === 'hide' && !isSeeker()));
+
+function onPhase(m) {
+  const prev = game.phase;
+  Object.assign(game, { phase: m.phase, round: m.round, seekTeam: m.seekTeam, results: m.results || [], winner: m.winner || null });
+  if (m.settings) game.settings = m.settings;
+  game.endsAt = performance.now() + (m.ms || 0);
+
+  if (m.phase === 'lobby') { others.clear(); wards = []; path = []; showScreen('lobby'); renderLobby(); return; }
+  showScreen('game');
+  if (m.phase === 'hide') {
+    const s = m.spawns[myId];
+    if (s) { me.x = s.x; me.z = s.z; }
+    me.caught = false; me.spot = 0; path = [];
+    me.wards = isSeeker() ? RULES.wardsPerSeeker : 0;
+    others.clear();
+    for (const [id, p] of Object.entries(m.spawns)) {
+      if (id !== myId) others.set(id, { x: p.x, z: p.z, tx: p.x, tz: p.z, caught: false, spot: 0 });
+    }
+    wards = [];
+    camera.follow = true;
+    if (prev === 'lobby' || prev === 'break') camera.scale = Math.min(view.w, view.h) / 4200;
+    camera.x = me.x; camera.z = me.z;
+    feed(isSeeker()
+      ? `Round ${m.round}: you seek. Hiders have ${m.ms / 1000} s to hide.`
+      : `Round ${m.round}: you hide! Get out of sight in ${m.ms / 1000} s.`);
+  } else if (m.phase === 'seek') {
+    feed(isSeeker() ? 'Go! Find the hiders.' : 'The seekers are out. Stay out of their sight.');
+  }
+  sourcesKey = '';
+  renderBoard();
+  renderOverlay();
+  syncButtons();
+  needsDraw = true;
+}
+
+function onSnap(m) {
+  const end = performance.now() + m.ms;
+  if (Math.abs(end - game.endsAt) > 300) game.endsAt = end;
+  const seen = new Set();
+  for (const [id, x, z, caught, spot, wardsLeft] of m.p) {
+    if (id === myId) {
+      if (caught && !me.caught) path = [];
+      me.caught = !!caught; me.spot = spot; me.wards = wardsLeft;
+      continue;
+    }
+    seen.add(id);
+    const o = others.get(id);
+    if (o) { o.tx = x; o.tz = z; o.caught = !!caught; o.spot = spot; }
+    else others.set(id, { x, z, tx: x, tz: z, caught: !!caught, spot });
+  }
+  for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
+  wards = m.w.map(([owner, x, z]) => ({ owner, x, z }));
+  renderBoard();
+  syncButtons();
+}
+
+function onCaught(m) {
+  const who = playerById(m.id), by = playerById(m.by);
+  const name = (p, fallback) => (p ? escapeHtml(p.name) : fallback);
+  if (m.id === myId) { me.caught = true; path = []; }
+  if (m.id === myId) feed(`You were caught by ${name(by, 'a ward')}! Now spectating.`);
+  else feed(`${name(who, 'A hider')} was caught by ${m.by === myId ? 'you' : name(by, 'a ward')}.`);
+  const o = others.get(m.id);
+  if (o) o.caught = true;
+  renderBoard();
+}
+
+function feed(html) {
+  const li = document.createElement('li');
+  li.innerHTML = html;
+  $('feed').append(li);
+  setTimeout(() => li.remove(), 6000);
+  while ($('feed').children.length > 4) $('feed').firstChild.remove();
+}
+
+// ---------------------------------------------------------------- vision
+
+let myBits = null, seekBits = null, sourcesKey = '';
+
+function teamSources(team) {
+  const list = [];
+  if (myTeam() === team && !me.caught) list.push({ x: me.x, z: me.z, sight: SIGHT.champion });
+  for (const [id, o] of others) {
+    const p = playerById(id);
+    if (p && p.team === team && !o.caught) list.push({ x: o.x, z: o.z, sight: SIGHT.champion });
+  }
+  if (team === game.seekTeam) {
+    for (const w of wards) { const p = playerById(w.owner); if (p && p.team === team) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth }); }
+  }
+  return list;
+}
+const bitsOf = (list) => vision.merge(list.map((s) => vision.source(s.x, s.z, s.sight)));
+const keyOf = (list) => list.map((s) => grid.index(s.x, s.z) + ':' + s.sight).join(',');
+
+function updateVision() {
+  if (!playing() && game.phase !== 'break' && game.phase !== 'results') return;
+  const mine = myTeam() ? teamSources(myTeam()) : [];
+  const seek = game.seekTeam ? teamSources(game.seekTeam) : [];
+  const showRed = playing() && (me.caught || (!isSeeker() && game.settings && game.settings.training));
+  const key = `${game.phase}|${me.caught}|${showRed}|${keyOf(mine)}|${keyOf(seek)}`;
+  if (key === sourcesKey) return;
+  sourcesKey = key;
+  myBits = bitsOf(mine);
+  seekBits = bitsOf(seek);
+  paintFog(!spectating(), showRed);
+  needsDraw = true;
+}
+
+const fogCanvas = document.createElement('canvas');
+fogCanvas.width = grid.w; fogCanvas.height = grid.h;
+const fogCtx = fogCanvas.getContext('2d');
+const FOG = { dark: [0, 0, 0, 165], red: [235, 40, 50, 105] };
+
+function paintFog(dark, red) {
+  const { w, h } = grid;
+  const f = new Float32Array(w * h), e = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    f[i] = dark && !has(myBits, i) ? 1 : 0;
+    e[i] = red && has(seekBits, i) ? 1 : 0;
+  }
+  const sigma = DEFAULT_FOG_EDGE / grid.cell / 3.3;
+  blur(f, w, h, sigma);
+  if (red) blur(e, w, h, sigma);
+  const img = fogCtx.createImageData(w, h);
+  const d = img.data;
+  for (let z = 0; z < h; z++) {
+    for (let x = 0; x < w; x++) {
+      const i = z * w + x;
+      const o = ((h - 1 - z) * w + x) * 4;
+      const af = f[i] * FOG.dark[3], ae = e[i] * (1 - f[i]) * FOG.red[3];
+      const a = af + ae;
+      if (a < 0.5) continue;
+      for (let c = 0; c < 3; c++) d[o + c] = (FOG.dark[c] * af + FOG.red[c] * ae) / a;
+      d[o + 3] = a;
+    }
+  }
+  fogCtx.putImageData(img, 0, 0);
+}
+
+// ---------------------------------------------------------------- camera
+
+const view = { w: 0, h: 0, dpr: 1 };
+const camera = { x: MAP / 2, z: MAP / 2, scale: 0.1, follow: true };
+function resize() {
+  view.dpr = window.devicePixelRatio || 1;
+  view.w = canvas.clientWidth; view.h = canvas.clientHeight;
+  canvas.width = Math.round(view.w * view.dpr);
+  canvas.height = Math.round(view.h * view.dpr);
+  needsDraw = true;
+}
+const toScreen = (x, z) => [(x - camera.x) * camera.scale + view.w / 2, (camera.z - z) * camera.scale + view.h / 2];
+const toWorld = (sx, sy) => ({ x: (sx - view.w / 2) / camera.scale + camera.x, z: camera.z - (sy - view.h / 2) / camera.scale });
+function clampCamera() {
+  const minScale = Math.min(view.w, view.h) / (MAP * 1.05);
+  camera.scale = Math.min(2, Math.max(minScale, camera.scale));
+  camera.x = Math.min(MAP, Math.max(0, camera.x));
+  camera.z = Math.min(MAP, Math.max(0, camera.z));
+}
+
+// ---------------------------------------------------------------- draw
+
+const COLORS = { blue: '#4aa8ff', red: '#ff4d5a', me: '#ffd34d', ward: '#ffd84a' };
+
+function draw() {
+  clampCamera();
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.fillStyle = '#0b0f14';
+  ctx.fillRect(0, 0, view.w, view.h);
+  if (bg.complete && bg.naturalWidth) {
+    const [bx, by] = toScreen(BACKGROUND.minX, BACKGROUND.minZ + BACKGROUND.size);
+    const bs = BACKGROUND.size * camera.scale;
+    ctx.drawImage(bg, bx, by, bs, bs);
+  }
+  const [gx, gy] = toScreen(grid.minX, grid.minZ + grid.h * grid.cell);
+  ctx.drawImage(fogCanvas, gx, gy, grid.w * grid.cell * camera.scale, grid.h * grid.cell * camera.scale);
+
+  const visible = (x, z) => spectating() || has(myBits, grid.index(x, z));
+  const team = myTeam();
+
+  // wards, only your own team's unless spectating
+  for (const w of wards) {
+    const p = playerById(w.owner);
+    if (!p || (p.team !== team && !spectating())) continue;
+    const [x, y] = toScreen(w.x, w.z);
+    const r = Math.max(5, 40 * camera.scale);
+    ctx.fillStyle = COLORS.ward; ctx.strokeStyle = COLORS[p.team]; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(x, y - r * 1.3); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r * 1.3); ctx.lineTo(x - r, y); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  }
+
+  // path
+  if (path.length) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(...toScreen(me.x, me.z));
+    for (const p of path) ctx.lineTo(...toScreen(p.x, p.z));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // other players
+  for (const [id, o] of others) {
+    const p = playerById(id);
+    if (!p) continue;
+    if (!o.caught && p.team !== team && !visible(o.x, o.z)) continue;
+    drawChampion(o.x, o.z, p, o, false);
+  }
+  const mine = playerById(myId);
+  if (mine && playing()) drawChampion(me.x, me.z, mine, me, true);
+}
+
+function drawChampion(x0, z0, p, s, isMe) {
+  const [x, y] = toScreen(x0, z0);
+  const r = Math.max(8, 65 * camera.scale);
+  ctx.globalAlpha = s.caught ? 0.45 : 1;
+  ctx.fillStyle = isMe ? COLORS.me : COLORS[p.team];
+  ctx.strokeStyle = isMe ? COLORS[p.team] : '#0b0f14'; ctx.lineWidth = isMe ? 3 : 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  if (s.caught) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - r * 0.6, y - r * 0.6); ctx.lineTo(x + r * 0.6, y + r * 0.6);
+    ctx.moveTo(x + r * 0.6, y - r * 0.6); ctx.lineTo(x - r * 0.6, y + r * 0.6); ctx.stroke();
+  } else if (s.spot > 0) {
+    // spotted meter around the champion
+    ctx.strokeStyle = '#ff5a64'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, r + 6, -Math.PI / 2, -Math.PI / 2 + (2 * Math.PI * s.spot) / RULES.catchTime); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = '#fff';
+  ctx.strokeText(p.name, x, y - r - 10);
+  ctx.fillText(p.name, x, y - r - 10);
+  ctx.textAlign = 'start';
+}
+
+// ---------------------------------------------------------------- HUD
+
+function renderHud() {
+  const hud = $('hud');
+  const left = game.endsAt - performance.now();
+  const seekName = game.seekTeam ? TEAM_LABEL[game.seekTeam] : '';
+  let cls = 'hud', html = '';
+  if (game.phase === 'hide') {
+    html = isSeeker()
+      ? `Round ${game.round} · <span class="time">${clock(left)}</span> · Hiders are hiding. You are held in your fountain.`
+      : `Round ${game.round} · <span class="time">${clock(left)}</span> · Hide! ${seekName} is released after this.`;
+  } else if (game.phase === 'seek') {
+    const hiders = playerList().filter((p) => p.team !== game.seekTeam);
+    const caught = hiders.filter((p) => (p.id === myId ? me.caught : (others.get(p.id) || {}).caught)).length;
+    if (isSeeker()) html = `Seek · <span class="time">${clock(left)}</span> · Caught ${caught}/${hiders.length} · Wards ${me.wards}`;
+    else if (me.caught) html = `Caught · spectating · <span class="time">${clock(left)}</span> · ${caught}/${hiders.length} caught`;
+    else if (me.spot > 0) { cls += ' seen'; html = `<strong>Spotted!</strong> Break their sight · <span class="time">${clock(left)}</span>`; }
+    else { cls += ' hidden-ok'; html = `<strong>Hidden</strong> · <span class="time">${clock(left)}</span> · ${hiders.length - caught} hider${hiders.length - caught === 1 ? '' : 's'} left`; }
+  } else if (game.phase === 'break') {
+    html = `Round 2 in <span class="time">${clock(left)}</span>`;
+  } else if (game.phase === 'results') {
+    html = 'Game over';
+  }
+  hud.className = cls;
+  if (hud.innerHTML !== html) hud.innerHTML = html;
+
+  const showMeter = game.phase === 'seek' && !isSeeker() && !me.caught && me.spot > 0;
+  $('meter').hidden = !showMeter;
+  if (showMeter) {
+    const pct = Math.min(100, Math.round((100 * me.spot) / RULES.catchTime));
+    $('meter').firstChild.style.width = pct + '%';
+    $('meter').lastChild.textContent = `Spotted ${pct}%`;
+  }
+}
+
+function renderBoard() {
+  if (game.phase === 'lobby') return;
+  const rows = TEAMS.map((team) => {
+    const role = team === game.seekTeam ? 'seeking' : 'hiding';
+    const items = playerList().filter((p) => p.team === team).map((p) => {
+      const out = p.id === myId ? me.caught : (others.get(p.id) || {}).caught;
+      return `<li class="${out && playing() ? 'out' : ''}"><span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
+        + `<span class="tag">${out && playing() ? 'caught' : ''}</span></li>`;
+    }).join('');
+    return `<h2 class="${team}">${TEAM_LABEL[team]}${playing() ? ` <span class="muted">· ${role}</span>` : ''}</h2><ul>${items}</ul>`;
+  }).join('');
+  if ($('board').innerHTML !== rows) $('board').innerHTML = rows;
+}
+
+function syncButtons() {
+  const canWard = game.phase === 'seek' && isSeeker() && me.wards > 0;
+  $('ward-btn').hidden = !(playing() && isSeeker());
+  $('ward-btn').disabled = !canWard;
+  $('ward-btn').textContent = `Ward (W) · ${me.wards}`;
+  $('follow-btn').classList.toggle('on', camera.follow);
+}
+
+function resultTable(r) {
+  const rows = r.players.slice().sort((a, b) => (a.role === b.role ? 0 : a.role === 'seek' ? -1 : 1)).map((p) => {
+    const by = r.players.find((q) => q.id === p.caughtBy);
+    const detail = p.role === 'seek'
+      ? `${p.catches} catch${p.catches === 1 ? '' : 'es'}`
+      : p.caughtAt !== null ? `caught at ${secs(p.caughtAt)}${by ? ' by ' + escapeHtml(by.name) : ''}` : `survived ${secs(p.survived)}`;
+    return `<tr><td>${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</td><td>${teamSpan(p.team)}</td><td>${p.role === 'seek' ? 'Seeker' : 'Hider'}</td>`
+      + `<td>${detail}</td><td class="num">${p.role === 'hide' ? secs(p.spotted) : ''}</td></tr>`;
+  }).join('');
+  return `<table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Result</th><th class="num">Time spotted</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+const roundLine = (r) => `${teamSpan(r.seekTeam)} caught <strong>${r.caught}/${r.total}</strong> hider${r.total === 1 ? '' : 's'}`
+  + (r.total && r.caught === r.total ? ` in ${secs(r.time)}` : '');
+
+function renderOverlay() {
+  const el = $('overlay');
+  el.hidden = !(game.phase === 'break' || game.phase === 'results');
+  if (el.hidden) return;
+  const card = $('overlay-card');
+  if (game.phase === 'break') {
+    const r = game.results[0];
+    card.innerHTML = `<h1>Round 1 over</h1><p class="big">${roundLine(r)}</p>${resultTable(r)}`
+      + `<p class="muted">Round 2 starts in <span id="break-left"></span>: ${teamSpan(otherTeam(r.seekTeam))} seeks, ${teamSpan(r.seekTeam)} hides.</p>`;
+    return;
+  }
+  const w = game.winner;
+  const head = !w ? 'Game over' : w === 'draw' ? 'Draw!' : `${teamSpan(w)} wins!`;
+  const totals = new Map();
+  for (const r of game.results) for (const p of r.players) {
+    const t = totals.get(p.id) || { name: p.name, team: p.team, catches: 0, survived: 0, spotted: 0 };
+    t.catches += p.catches;
+    if (p.role === 'hide') { t.survived += p.survived; t.spotted += p.spotted; }
+    totals.set(p.id, t);
+  }
+  const totalRows = [...totals.entries()].sort((a, b) => b[1].catches - a[1].catches || b[1].survived - a[1].survived)
+    .map(([id, t]) => `<tr><td>${escapeHtml(t.name)}${id === myId ? ' (you)' : ''}</td><td>${teamSpan(t.team)}</td>`
+      + `<td class="num">${t.catches}</td><td class="num">${secs(t.survived)}</td><td class="num">${secs(t.spotted)}</td></tr>`).join('');
+  card.innerHTML = `<h1>${head}</h1>`
+    + game.results.map((r) => `<p class="big">Round ${r.round}: ${roundLine(r)}</p>`).join('')
+    + `<table><thead><tr><th>Player</th><th>Team</th><th class="num">Catches</th><th class="num">Survived</th><th class="num">Time spotted</th></tr></thead><tbody>${totalRows}</tbody></table>`
+    + '<p class="muted">The team that caught the larger share of hiders wins; on a tie, the faster team.</p>'
+    + `<div class="actions"><a class="back" href="./">Leave</a>${isHost() ? '<button id="rematch" class="primary">Back to lobby</button>' : '<span class="muted">Waiting for the host to start a rematch…</span>'}</div>`;
+  const btn = $('rematch');
+  if (btn) btn.addEventListener('click', () => send({ t: 'lobby' }));
+}
+
+// ---------------------------------------------------------------- movement and loop
+
+function orderMove(x, z) {
+  if (!canMove()) return;
+  const side = myTeam();
+  const target = grid.nearestWalkable(x, z, side);
+  if (!target) return;
+  const p = findPath(grid, side, me, target);
+  if (p) { path = p; needsDraw = true; }
+}
+
+function placeWard(target) {
+  if (!(game.phase === 'seek' && isSeeker() && me.wards > 0 && !me.caught)) return;
+  let { x, z } = target || me;
+  const d = Math.hypot(x - me.x, z - me.z);
+  if (d > RULES.wardRange) { x = me.x + ((x - me.x) * RULES.wardRange) / d; z = me.z + ((z - me.z) * RULES.wardRange) / d; }
+  send({ t: 'ward', x, z });
+}
+
+let last = performance.now();
+let lastSend = 0, lastSentPos = '';
+let lastUi = 0;
+function tick(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (path.length && canMove()) {
+    let budget = DEFAULT_MOVE_SPEED * dt;
+    while (budget > 0 && path.length) {
+      const p = path[0];
+      const d = Math.hypot(p.x - me.x, p.z - me.z);
+      if (d <= budget) { me.x = p.x; me.z = p.z; path.shift(); budget -= d; }
+      else { me.x += ((p.x - me.x) * budget) / d; me.z += ((p.z - me.z) * budget) / d; budget = 0; }
+    }
+    needsDraw = true;
+  } else if (path.length && !canMove() && !(game.phase === 'hide')) path = [];
+
+  // Report our position (and keep the connection alive in the lobby).
+  if (link && myId && !server && now - lastHeard > TIMEOUT * 1000) lost('The host stopped responding, so the room closed.');
+  if (link && myId) {
+    const pos = `${Math.round(me.x)},${Math.round(me.z)}`;
+    if (playing() && now - lastSend > 1000 / NET_RATE && (pos !== lastSentPos || now - lastSend > 1000)) {
+      send({ t: 'pos', x: me.x, z: me.z }); lastSend = now; lastSentPos = pos;
+    } else if (!playing() && now - lastSend > 2000) { send({ t: 'ping' }); lastSend = now; }
+  }
+
+  // Others glide toward their last reported position.
+  const k = Math.min(1, dt * 10);
+  for (const o of others.values()) {
+    if (o.x !== o.tx || o.z !== o.tz) {
+      o.x += (o.tx - o.x) * k; o.z += (o.tz - o.z) * k;
+      if (Math.abs(o.tx - o.x) < 1 && Math.abs(o.tz - o.z) < 1) { o.x = o.tx; o.z = o.tz; }
+      needsDraw = true;
+    }
+  }
+
+  if (now - lastUi > 200) {
+    lastUi = now;
+    if (game.phase === 'lobby' && room && room.countdown !== null) lobbyStatus();
+    if (!$('game').hidden) {
+      renderHud();
+      const bl = $('break-left');
+      if (bl) bl.textContent = clock(game.endsAt - now);
+    }
+  }
+  if (!$('game').hidden) {
+    updateVision();
+    if (camera.follow && playing()) { camera.x = me.x; camera.z = me.z; }
+    if (needsDraw) { draw(); needsDraw = false; }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------------------------------------------------------------- input
+
+const pointers = new Map();
+let drag = null, pinch = null, lastRightOrder = 0, cursor = null;
+const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  const [sx, sy] = local(e);
+  pointers.set(e.pointerId, [sx, sy]);
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { dist: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: camera.scale };
+    drag = null;
+    return;
+  }
+  if (e.button === 2) {
+    const w = toWorld(sx, sy);
+    orderMove(w.x, w.z); lastRightOrder = performance.now();
+    drag = { type: 'order' };
+    return;
+  }
+  drag = { type: 'pan', sx, sy, cx: camera.x, cz: camera.z, moved: false, touch: e.pointerType === 'touch' };
+});
+canvas.addEventListener('pointermove', (e) => {
+  const [sx, sy] = local(e);
+  cursor = toWorld(sx, sy);
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, [sx, sy]);
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    camera.scale = pinch.scale * (Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.dist);
+    needsDraw = true;
+    return;
+  }
+  if (!drag) return;
+  if (drag.type === 'order' && performance.now() - lastRightOrder > 120) {
+    orderMove(cursor.x, cursor.z); lastRightOrder = performance.now();
+  } else if (drag.type === 'pan') {
+    if (Math.hypot(sx - drag.sx, sy - drag.sy) > 5) drag.moved = true;
+    if (drag.moved) {
+      camera.follow = false; syncButtons();
+      camera.x = drag.cx - (sx - drag.sx) / camera.scale;
+      camera.z = drag.cz + (sy - drag.sy) / camera.scale;
+      needsDraw = true;
+    }
+  }
+});
+function endPointer(e) {
+  const [sx, sy] = local(e);
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (drag && drag.type === 'pan' && !drag.moved && drag.touch) { const w = toWorld(sx, sy); orderMove(w.x, w.z); }
+  drag = null;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const [sx, sy] = local(e);
+  const before = toWorld(sx, sy);
+  camera.scale *= Math.exp(-e.deltaY * 0.0015);
+  clampCamera();
+  if (!camera.follow || !playing()) {
+    const after = toWorld(sx, sy);
+    camera.x += before.x - after.x; camera.z += before.z - after.z;
+  }
+  needsDraw = true;
+}, { passive: false });
+
+window.addEventListener('keydown', (e) => {
+  if ($('game').hidden || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); camera.x = me.x; camera.z = me.z; needsDraw = true; }
+  else if (e.key === 'y' || e.key === 'Y') { camera.follow = !camera.follow; syncButtons(); needsDraw = true; }
+  else if (e.key === 's' || e.key === 'S') { path = []; needsDraw = true; }
+  else if (e.key === 'w' || e.key === 'W') placeWard(cursor);
+});
+$('ward-btn').addEventListener('click', () => placeWard(null));
+$('follow-btn').addEventListener('click', () => { camera.follow = !camera.follow; syncButtons(); needsDraw = true; });
+window.addEventListener('resize', resize);
+
+// ---------------------------------------------------------------- start
+
+syncHome();
+document.body.classList.remove('loading');
+requestAnimationFrame(tick);
+
+// Exposed for debugging in the console.
+window.hs = { grid, vision, game, me, others, get server() { return server; }, get room() { return room; } };
