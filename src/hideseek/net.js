@@ -14,6 +14,8 @@
 //   openClient(code, { onMessage(msg), onClose() })
 //     -> { send(msg), close() }
 
+import { t } from '../i18n.js';
+
 const PREFIX = 'sol-hs-';
 const params = new URLSearchParams(location.search);
 const kind = params.get('net') === 'local' ? 'local' : 'peer';
@@ -38,7 +40,7 @@ function loadPeer() {
     const s = document.createElement('script');
     s.src = new URL('../vendor/peerjs.min.js', import.meta.url).href;
     s.onload = () => resolve(window.Peer);
-    s.onerror = () => reject(new Error('Could not load the networking library.'));
+    s.onerror = () => reject(new Error(t('net.lib')));
     document.head.append(s);
   });
   return peerLib;
@@ -57,10 +59,10 @@ function withTimeout(promise, ms, message) {
 }
 
 function peerError(e) {
-  if (e && e.type === 'unavailable-id') return new Error('That room code is taken. Try again.');
-  if (e && e.type === 'peer-unavailable') return new Error('Room not found. Check the code, or ask the host to keep their tab open.');
-  if (e && (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error')) return new Error('Could not reach the matchmaking server. Check your connection.');
-  if (e && e.type === 'browser-incompatible') return new Error('This browser does not support WebRTC.');
+  if (e && e.type === 'unavailable-id') return new Error(t('net.taken'));
+  if (e && e.type === 'peer-unavailable') return new Error(t('net.notFound'));
+  if (e && (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error')) return new Error(t('net.server'));
+  if (e && e.type === 'browser-incompatible') return new Error(t('net.webrtc'));
   return e instanceof Error ? e : new Error(String(e && e.type || e));
 }
 
@@ -70,7 +72,7 @@ async function peerHost(code, h) {
   await withTimeout(new Promise((resolve, reject) => {
     peer.once('open', resolve);
     peer.once('error', (e) => reject(peerError(e)));
-  }), 15000, 'Could not reach the matchmaking server.').catch((e) => { peer.destroy(); throw e; });
+  }), 15000, t('net.server')).catch((e) => { peer.destroy(); throw e; });
 
   const conns = new Map();
   // Losing the signaling server does not drop open data channels; reconnect
@@ -101,7 +103,7 @@ async function peerClient(code, h) {
       c.once('open', () => resolve(c));
       c.once('error', (e) => reject(peerError(e)));
     });
-  }), 20000, 'Could not connect to the room.').catch((e) => { peer.destroy(); throw e; });
+  }), 20000, t('net.connect')).catch((e) => { peer.destroy(); throw e; });
 
   let closed = false;
   const end = () => { if (!closed) { closed = true; h.onClose(); } };
@@ -122,11 +124,11 @@ async function localHost(code, h) {
   const ch = new BroadcastChannel(PREFIX + code);
   // Is someone already hosting this code?
   const taken = await new Promise((resolve) => {
-    const t = setTimeout(() => { ch.onmessage = null; resolve(false); }, 300);
-    ch.onmessage = (e) => { if (e.data.k === 'here') { clearTimeout(t); resolve(true); } };
+    const timer = setTimeout(() => { ch.onmessage = null; resolve(false); }, 300);
+    ch.onmessage = (e) => { if (e.data.k === 'here') { clearTimeout(timer); resolve(true); } };
     ch.postMessage({ k: 'probe' });
   });
-  if (taken) { ch.close(); throw new Error('That room code is taken. Try again.'); }
+  if (taken) { ch.close(); throw new Error(t('net.taken')); }
 
   const peers = new Set();
   ch.onmessage = ({ data: m }) => {
@@ -146,8 +148,8 @@ async function localClient(code, h) {
   const ch = new BroadcastChannel(PREFIX + code);
   const id = 'p' + Math.random().toString(36).slice(2, 10);
   await new Promise((resolve, reject) => {
-    const t = setTimeout(() => { ch.close(); reject(new Error('Room not found. Check the code, or ask the host to keep their tab open.')); }, 1500);
-    ch.onmessage = ({ data: m }) => { if (m.k === 'open' && m.to === id) { clearTimeout(t); resolve(); } };
+    const timer = setTimeout(() => { ch.close(); reject(new Error(t('net.notFound'))); }, 1500);
+    ch.onmessage = ({ data: m }) => { if (m.k === 'open' && m.to === id) { clearTimeout(timer); resolve(); } };
     ch.postMessage({ k: 'hello', from: id });
   });
   let closed = false;

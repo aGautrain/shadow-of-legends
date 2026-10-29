@@ -1,3 +1,5 @@
+import { onLangChange } from './lang.js';
+import { t, num } from './i18n.js';
 import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
@@ -14,7 +16,7 @@ function hashPatch() {
   try { return JSON.parse(decodeURIComponent(location.hash.slice(1))).p; } catch { return undefined; }
 }
 const patch = PATCHES.find(([id]) => id === hashPatch()) || PATCHES[0];
-const res = await fetch(patch[2]);
+const res = await fetch(patch[1]);
 const grid = new NavGrid(await res.json());
 const vision = new Vision(grid);
 const turrets = grid.findTurrets();
@@ -103,9 +105,9 @@ function loadHash() {
     const s = JSON.parse(decodeURIComponent(location.hash.slice(1)));
     state.side = s.s === 'red' ? 'red' : 'blue';
     state.speed = Number(s.v) || DEFAULT_MOVE_SPEED;
-    state.dragon = TERRAINS.dragon.some(([k]) => k === s.d) ? s.d : '';
-    state.baron = TERRAINS.baron.some(([k]) => k === s.b) ? s.b : '';
-    state.atakhan = TERRAINS.atakhan.some(([k]) => k === s.a) && grid.overlays[s.a] ? s.a : '';
+    state.dragon = TERRAINS.dragon.includes(s.d) ? s.d : '';
+    state.baron = TERRAINS.baron.includes(s.b) ? s.b : '';
+    state.atakhan = TERRAINS.atakhan.includes(s.a) && grid.overlays[s.a] ? s.a : '';
     state.me = { x: s.m[0], z: s.m[1] };
     state.units = (s.u || []).filter(([k]) => UNIT_KINDS[k])
       .map(([kind, team, x, z]) => ({ id: nextId++, kind, team: team === 'ally' ? 'ally' : 'enemy', x, z }));
@@ -344,7 +346,7 @@ function drawRuler() {
   ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
   ctx.fillStyle = '#ffffff';
   for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill(); }
-  const label = `${Math.round(dist)} units`;
+  const label = t('ped.ruler.units', { n: Math.round(dist) });
   ctx.font = '600 13px system-ui, sans-serif';
   const tw = ctx.measureText(label).width;
   const lx = bx + 12, ly = by - 12;
@@ -356,21 +358,21 @@ function drawRuler() {
 
 // ---------------------------------------------------------------- status
 
-function fmt(s) { return s.toFixed(1) + ' s'; }
+function fmt(s) { return num(s, 1) + ' s'; }
 function updateStatus() {
   const who = seenBy();
   const el = $('status');
   if (who.length) {
     el.className = 'status seen';
-    el.innerHTML = `<strong>Seen</strong> by ${who.join(', ')}`;
+    el.innerHTML = t('ped.seen', { who: who.join(', ') });
   } else {
     el.className = 'status hidden';
-    el.innerHTML = '<strong>Hidden</strong> from the enemy team';
+    el.innerHTML = t('ped.hidden');
   }
 }
 function updateExposure() {
   const pct = exposure.walked > 0 ? Math.round((100 * exposure.seen) / exposure.walked) : 0;
-  $('exposure').textContent = `Seen ${fmt(exposure.seen)} of ${fmt(exposure.walked)} walked (${pct}%)`;
+  $('exposure').textContent = t('ped.exposure', { seen: fmt(exposure.seen), walked: fmt(exposure.walked), pct });
 }
 
 // ---------------------------------------------------------------- movement
@@ -566,7 +568,7 @@ function setTool(t) {
   if (t !== 'ruler') { ruler = null; updateRulerLabel(); needsDraw = true; }
 }
 function updateRulerLabel() {
-  $('ruler').textContent = ruler ? `📏 ${Math.round(Math.hypot(ruler.b.x - ruler.a.x, ruler.b.z - ruler.a.z))}` : '📏 Ruler';
+  $('ruler').textContent = ruler ? `📏 ${Math.round(Math.hypot(ruler.b.x - ruler.a.x, ruler.b.z - ruler.a.z))}` : t('ped.ruler');
 }
 $('ruler').addEventListener('click', () => setTool(tool === 'ruler' ? 'select' : 'ruler'));
 document.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
@@ -584,7 +586,7 @@ for (const key of Object.keys(state.view)) {
 }
 
 for (const [kind, sel] of [['dragon', $('dragon')], ['baron', $('baron')], ['atakhan', $('atakhan')]]) {
-  for (const [value, label] of TERRAINS[kind]) sel.add(new Option(label, value));
+  for (const value of TERRAINS[kind]) sel.add(new Option('', value));
   sel.addEventListener('change', () => { state[kind] = sel.value; applyTerrain(); });
 }
 
@@ -617,11 +619,13 @@ document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('cli
 }));
 
 // Sight radius tuning. Inputs are built from SIGHT so new kinds show up automatically.
-const SIGHT_LABELS = { champion: 'Champion', stealth: 'Stealth Ward', control: 'Control Ward', farsight: 'Farsight Ward', turret: 'Turret' };
 for (const k of Object.keys(SIGHT)) {
   const label = document.createElement('label');
   label.className = 'row';
-  label.textContent = SIGHT_LABELS[k] || k;
+  const name = document.createElement('span');
+  name.dataset.i18n = 'unit.' + k;
+  name.textContent = t('unit.' + k);
+  label.append(name);
   const input = document.createElement('input');
   input.type = 'number'; input.min = 100; input.max = 3000; input.step = 25; input.id = 'sight-' + k;
   input.addEventListener('input', () => {
@@ -647,13 +651,13 @@ $('clear').addEventListener('click', () => { state.units = []; state.deadTurrets
 $('default').addEventListener('click', () => { defaultScenario(); path = []; sourcesChanged(); });
 $('share').addEventListener('click', async () => {
   saveHash();
-  try { await navigator.clipboard.writeText(location.href); $('share').textContent = 'Link copied'; }
-  catch { $('share').textContent = 'Copy the address bar'; }
-  setTimeout(() => { $('share').textContent = 'Copy share link'; }, 1800);
+  try { await navigator.clipboard.writeText(location.href); $('share').textContent = t('ped.copied'); }
+  catch { $('share').textContent = t('ped.copyBar'); }
+  setTimeout(() => { $('share').textContent = t('ped.share'); }, 1800);
 });
 $('toggle-panel').addEventListener('click', () => document.body.classList.toggle('panel-hidden'));
 
-for (const [id, label] of PATCHES) $('patch').add(new Option(label, id));
+for (const [id] of PATCHES) $('patch').add(new Option('', id));
 $('patch').value = patch[0];
 $('patch').addEventListener('change', (e) => {
   // Switching grids reloads the page with the same scenario.
@@ -667,6 +671,14 @@ $('patch').addEventListener('change', (e) => {
 for (const kind of Object.keys(TERRAINS)) {
   for (const opt of $(kind).options) opt.disabled = opt.value !== '' && !grid.overlays[opt.value] && !ART_ONLY_TERRAINS.includes(opt.value);
 }
+
+// Option texts of the map selects, in the current language.
+function labelOptions() {
+  for (const kind of Object.keys(TERRAINS)) for (const opt of $(kind).options) opt.textContent = t(`terrain.${kind}.${opt.value || 'none'}`);
+  for (const opt of $('patch').options) opt.textContent = t('patch.' + opt.value);
+}
+labelOptions();
+onLangChange(() => { labelOptions(); updateStatus(); updateExposure(); updateRulerLabel(); });
 
 function syncPanel() {
   $('side').value = state.side;

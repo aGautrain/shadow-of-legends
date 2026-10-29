@@ -1,97 +1,99 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Assets, data and src live at the site root, shared by every mode. -->
   <base href="../">
-  <title>Pedagogic · Shadow of Legends</title>
-  <meta name="description" content="Walk Summoner's Rift and see live what the enemy team can see.">
+  <title data-i18n="ped.title">Pédagogique · Shadow of Legends</title>
+  <meta name="description" data-i18n-attr="content:ped.desc" content="Parcourez la Faille de l'invocateur et voyez en direct ce que l'équipe ennemie voit.">
   <link rel="stylesheet" href="src/style.css">
+  <link rel="stylesheet" href="src/lang.css">
 </head>
 <body class="loading">
-  <canvas id="map" aria-label="Summoner's Rift map"></canvas>
+  <canvas id="map" data-i18n-attr="aria-label:map.aria" aria-label="Carte de la Faille de l'invocateur"></canvas>
 
-  <div id="status" class="status">Loading map…</div>
+  <div id="status" class="status" data-i18n="ped.loading">Chargement de la carte…</div>
 
-  <button id="ruler" class="ruler" title="Measure a distance in game units (R). Drag on the map; hold Shift to start from your champion.">📏 Ruler</button>
+  <button id="ruler" class="ruler" data-i18n="ped.ruler" data-i18n-attr="title:ped.ruler.title" title="Mesurer une distance en unités du jeu (R). Faites glisser sur la carte ; maintenez Maj pour partir de votre champion.">📏 Règle</button>
 
-  <button id="toggle-panel" class="panel-toggle" title="Show or hide the panel">☰</button>
+  <button id="toggle-panel" class="panel-toggle" data-i18n-attr="title:ped.panel" title="Afficher ou masquer le panneau">☰</button>
 
   <aside id="panel">
     <header>
-      <a class="back" href="./">← All modes</a>
+      <div class="lang-switch" data-lang-switch></div>
+      <a class="back" href="./" data-i18n="back">← Tous les modes</a>
       <h1>Shadow of Legends</h1>
-      <p class="sub">Pedagogic mode · Fog of war trainer for Summoner's Rift</p>
+      <p class="sub" data-i18n="ped.sub">Mode pédagogique · Entraînement au brouillard de guerre sur la Faille de l'invocateur</p>
     </header>
 
     <section>
-      <h2>Place</h2>
+      <h2 data-i18n="ped.place">Placer</h2>
       <div class="tools">
-        <button data-tool="select" class="active">Select / drag</button>
-        <button data-tool="erase">Erase</button>
-        <button data-tool="enemy:champion" class="enemy">Enemy champion</button>
-        <button data-tool="enemy:stealth" class="enemy">Enemy Stealth Ward</button>
-        <button data-tool="enemy:control" class="enemy">Enemy Control Ward</button>
-        <button data-tool="enemy:farsight" class="enemy">Enemy Farsight Ward</button>
-        <button data-tool="ally:champion" class="ally">Ally champion</button>
-        <button data-tool="ally:stealth" class="ally">Ally Stealth Ward</button>
+        <button data-tool="select" class="active" data-i18n="ped.tool.select">Sélectionner / déplacer</button>
+        <button data-tool="erase" data-i18n="ped.tool.erase">Effacer</button>
+        <button data-tool="enemy:champion" class="enemy" data-i18n="ped.tool.enemy.champion">Champion ennemi</button>
+        <button data-tool="enemy:stealth" class="enemy" data-i18n="ped.tool.enemy.stealth">Balise furtive ennemie</button>
+        <button data-tool="enemy:control" class="enemy" data-i18n="ped.tool.enemy.control">Balise de contrôle ennemie</button>
+        <button data-tool="enemy:farsight" class="enemy" data-i18n="ped.tool.enemy.farsight">Balise longue-vue ennemie</button>
+        <button data-tool="ally:champion" class="ally" data-i18n="ped.tool.ally.champion">Champion allié</button>
+        <button data-tool="ally:stealth" class="ally" data-i18n="ped.tool.ally.stealth">Balise furtive alliée</button>
       </div>
-      <p class="hint">Click a turret to mark it destroyed.</p>
+      <p class="hint" data-i18n="ped.turretHint">Cliquez sur une tourelle pour la marquer détruite.</p>
     </section>
 
     <section>
-      <h2>Show</h2>
-      <label><input type="checkbox" id="view-enemy"> Enemy vision <span class="swatch red"></span></label>
-      <label><input type="checkbox" id="view-fog"> My team's fog <span class="swatch dark"></span></label>
-      <label><input type="checkbox" id="view-rings"> Enemy sight radius</label>
-      <label><input type="checkbox" id="view-grid"> Walls and brush grid</label>
-      <label><input type="checkbox" id="follow"> Lock camera (Y)</label>
+      <h2 data-i18n="ped.show">Afficher</h2>
+      <label><input type="checkbox" id="view-enemy"> <span data-i18n="ped.view.enemy">Vision ennemie</span> <span class="swatch red"></span></label>
+      <label><input type="checkbox" id="view-fog"> <span data-i18n="ped.view.fog">Brouillard de mon équipe</span> <span class="swatch dark"></span></label>
+      <label><input type="checkbox" id="view-rings"> <span data-i18n="ped.view.rings">Rayon de vision ennemi</span></label>
+      <label><input type="checkbox" id="view-grid"> <span data-i18n="ped.view.grid">Grille des murs et buissons</span></label>
+      <label><input type="checkbox" id="follow"> <span data-i18n="ped.follow">Verrouiller la caméra (Y)</span></label>
     </section>
 
     <section>
-      <h2>You</h2>
-      <label class="row">Side
-        <select id="side"><option value="blue">Blue</option><option value="red">Red</option></select>
+      <h2 data-i18n="ped.you">Vous</h2>
+      <label class="row"><span data-i18n="ped.side">Côté</span>
+        <select id="side"><option value="blue" data-i18n="team.blue">Bleu</option><option value="red" data-i18n="team.red">Rouge</option></select>
       </label>
-      <label class="row">Move speed <input id="speed" type="number" min="100" max="1000" step="5"></label>
+      <label class="row"><span data-i18n="ped.speed">Vitesse de déplacement</span> <input id="speed" type="number" min="100" max="1000" step="5"></label>
       <div class="presets">
         <button data-speed="330">330</button>
         <button data-speed="345">345</button>
-        <button data-speed="370">+25 boots</button>
-        <button data-speed="390">+45 boots</button>
+        <button data-speed="370" data-i18n="ped.boots25">+25 bottes</button>
+        <button data-speed="390" data-i18n="ped.boots45">+45 bottes</button>
       </div>
       <p id="exposure" class="exposure"></p>
-      <button id="reset-exposure" class="link">Reset counter</button>
+      <button id="reset-exposure" class="link" data-i18n="ped.resetExposure">Remettre le compteur à zéro</button>
     </section>
 
     <section>
-      <h2>Sight radius</h2>
+      <h2 data-i18n="ped.sight">Rayon de vision</h2>
       <div id="sight-inputs"></div>
-      <p class="hint">Game units, center to center. Defaults are the wiki values.</p>
-      <label class="row">Fog edge softness <input id="fog-edge" type="number" min="0" max="1000" step="25"></label>
-      <p class="hint">Width of the fade at the vision edge, in game units. Visual only; 0 = hard edge.</p>
-      <button id="sight-reset" class="link">Reset to game values</button>
+      <p class="hint" data-i18n="ped.sightHint">En unités du jeu, de centre à centre. Par défaut, les valeurs du wiki.</p>
+      <label class="row"><span data-i18n="ped.fogEdge">Douceur du bord du brouillard</span> <input id="fog-edge" type="number" min="0" max="1000" step="25"></label>
+      <p class="hint" data-i18n="ped.fogEdgeHint">Largeur du fondu au bord de la vision, en unités du jeu. Purement visuel ; 0 = bord net.</p>
+      <button id="sight-reset" class="link" data-i18n="ped.sightReset">Revenir aux valeurs du jeu</button>
     </section>
 
     <section>
-      <h2>Map</h2>
+      <h2 data-i18n="ped.map">Carte</h2>
       <label class="row">Dragon <select id="dragon"></select></label>
       <label class="row">Baron <select id="baron"></select></label>
       <label class="row">Atakhan <select id="atakhan"></select></label>
     </section>
 
     <section class="actions">
-      <button id="share">Copy share link</button>
-      <button id="default">Load example</button>
-      <button id="clear">Remove all</button>
+      <button id="share" data-i18n="ped.share">Copier le lien de partage</button>
+      <button id="default" data-i18n="ped.example">Charger l'exemple</button>
+      <button id="clear" data-i18n="ped.clear">Tout retirer</button>
     </section>
 
     <section class="help">
-      <p><kbd>Right-click</kbd> move · <kbd>Wheel</kbd> zoom · <kbd>Drag</kbd> pan · <kbd>Space</kbd> center · <kbd>R</kbd> ruler · <kbd>S</kbd> stop · <kbd>Del</kbd> remove hovered · On touch: tap to move</p>
-      <label class="row">Map data <select id="patch"></select></label>
-      <p>Map: Summoner's Rift navgrid. Default sight: champion 1350, wards 900, Farsight 500, turret 1350. <a href="https://github.com/aGautrain/shadow-of-legends">Source and plan</a></p>
-      <p class="legal">Shadow of Legends isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+      <p data-i18n-html="ped.help"><kbd>Clic droit</kbd> se déplacer · <kbd>Molette</kbd> zoom · <kbd>Glisser</kbd> déplacer la vue · <kbd>Espace</kbd> centrer · <kbd>R</kbd> règle · <kbd>S</kbd> s'arrêter · <kbd>Suppr</kbd> retirer l'élément survolé · Sur écran tactile : touchez pour vous déplacer</p>
+      <label class="row"><span data-i18n="ped.mapData">Données de carte</span> <select id="patch"></select></label>
+      <p><span data-i18n="ped.mapNote">Carte : navgrid de la Faille de l'invocateur. Vision par défaut : champion 1350, balises 900, longue-vue 500, tourelle 1350.</span> <a href="https://github.com/aGautrain/shadow-of-legends" data-i18n="source">Code source et plan</a></p>
+      <p class="legal" data-i18n="legal">Shadow of Legends n'est pas approuvé par Riot Games et ne reflète pas les opinions de Riot Games ni de quiconque officiellement impliqué dans la production ou la gestion des propriétés de Riot Games. Riot Games et toutes les propriétés associées sont des marques commerciales ou des marques déposées de Riot Games, Inc.</p>
     </section>
   </aside>
 

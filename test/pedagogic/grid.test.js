@@ -101,7 +101,7 @@ test('both fountains are walkable, and each base has gates only its team can wal
 
 test('every terrain with map changes has an overlay in the data', () => {
   const grid = loadRealGrid();
-  const names = Object.values(TERRAINS).flat().map(([k]) => k).filter((k) => k && !ART_ONLY_TERRAINS.includes(k));
+  const names = Object.values(TERRAINS).flat().filter((k) => k && !ART_ONLY_TERRAINS.includes(k));
   for (const name of names) assert.ok(grid.overlays[name]?.length, name);
   for (const name of ART_ONLY_TERRAINS) assert.equal(grid.overlays[name], undefined, name);
 });

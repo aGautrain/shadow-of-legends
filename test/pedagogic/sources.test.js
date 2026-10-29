@@ -6,6 +6,10 @@ import { teamSources, whoSees } from '../../src/sources.js';
 import { Vision } from '../../src/vision.js';
 import { SIGHT } from '../../src/config.js';
 import { openGrid, makeGrid, at } from '../helpers.js';
+import { setLang } from '../../src/i18n.js';
+
+// Source names follow the page language; these tests read them in English.
+setLang('en');
 
 const turrets = [
   { x: 1000, z: 1000, side: 'blue', lane: 'mid' },

@@ -1,3 +1,5 @@
+import { t } from '../i18n.js';
+
 // Small inline icons for the Fantasy categories, drawn on a 24 x 24 grid in
 // the category's color.
 
@@ -17,6 +19,6 @@ export const CATEGORY_COLOR = {
 // A round badge with the category's icon, or '' for no category.
 export function categoryIcon(category, cls = '') {
   if (!PATHS[category]) return '';
-  return `<span class="cls ${cls}" style="--cls:${CATEGORY_COLOR[category]}" title="${category}">`
+  return `<span class="cls ${cls}" style="--cls:${CATEGORY_COLOR[category]}" title="${t('cat.' + category)}">`
     + `<svg viewBox="0 0 24 24" aria-hidden="true">${PATHS[category]}</svg></span>`;
 }

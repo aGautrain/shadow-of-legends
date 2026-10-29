@@ -1,0 +1,7 @@
+/* FR / EN switch, shared by every page. */
+.lang-switch { display: inline-flex; float: right; margin-left: 8px; border: 1px solid var(--line, #263142); border-radius: 999px;
+  overflow: hidden; background: rgba(11, 15, 20, 0.6); }
+.lang-switch button { margin: 0; padding: 3px 9px; border: 0; border-radius: 0; background: none; color: var(--muted, #8d9aae);
+  font: 600 11px/1.4 system-ui, sans-serif; letter-spacing: 0.06em; cursor: pointer; }
+.lang-switch button:hover { color: var(--text, #e6ebf2); }
+.lang-switch button[aria-pressed="true"] { background: var(--gold, #c8aa6e); color: #0b0f14; }

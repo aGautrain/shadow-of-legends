@@ -1,6 +1,8 @@
 // Hide and seek: home, lobby and game screens of one page. The page stays
 // the same from lobby to results so the connection to the host survives.
 
+import { onLangChange } from '../lang.js';
+import { t, num, lang } from '../i18n.js';
 import { NavGrid } from '../grid.js';
 import { Vision, has } from '../vision.js';
 import { findPath } from '../path.js';
@@ -9,7 +11,7 @@ import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from
 import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
-import { loadChampions, splashUrl } from './champions.js';
+import { loadChampions, splashUrl, searchKey } from './champions.js';
 import { SPELLS, categoryOf, clampRange, blinkTarget, spellStats } from './spells.js';
 import { categoryIcon } from './icons.js';
 
@@ -18,7 +20,7 @@ const canvas = $('map');
 const ctx = canvas.getContext('2d');
 let needsDraw = true;
 
-const grid = new NavGrid(await (await fetch(PATCHES[0][2])).json());
+const grid = new NavGrid(await (await fetch(PATCHES[0][1])).json());
 const vision = new Vision(grid);
 const MAP = grid.w * grid.cell;
 const bg = new Image();
@@ -30,10 +32,16 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const TEAM_LABEL = { blue: 'Blue', red: 'Red' };
-const teamSpan = (t) => `<span class="${t}-text">${TEAM_LABEL[t]}</span>`;
+const teamName = (team) => t('team.' + team);
+const teamSpan = (team) => `<span class="${team}-text">${teamName(team)}</span>`;
 const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const secs = (s) => `${Math.round(s)} s`;
+const you = (id) => (id === myId ? t('you') : '');
+// A Fantasy spell's name and texts in the current language, with its numbers.
+const spellText = (category, field) => {
+  const sp = SPELLS[category];
+  return t(`spell.${category}.${field}`, { ...sp, pct: sp.speed ? Math.round((sp.speed - 1) * 100) : 0 });
+};
 
 // ---------------------------------------------------------------- connection
 
@@ -56,7 +64,7 @@ function homeStatus(text, error = false) {
 
 function readName() {
   const name = $('name').value.trim();
-  if (!name) { homeStatus('Pick a name first.', true); $('name').focus(); return null; }
+  if (!name) { homeStatus(t('hs.pickName'), true); $('name').focus(); return null; }
   store.set('sol-hs-name', name);
   return name;
 }
@@ -69,7 +77,7 @@ async function createRoom() {
   const name = readName();
   if (!name) return;
   setBusy(true);
-  homeStatus('Creating the room…');
+  homeStatus(t('hs.creating'));
   let lastError = null;
   for (let attempt = 0; attempt < 3 && !link; attempt++) {
     const code = newCode();
@@ -97,7 +105,7 @@ async function createRoom() {
     }
   }
   setBusy(false);
-  if (!link) { homeStatus(lastError ? lastError.message : 'Could not create the room.', true); return; }
+  if (!link) { homeStatus(lastError ? lastError.message : t('hs.createFailed'), true); return; }
   setHash(roomCode);
   link.send({ t: 'hello', name });
 }
@@ -106,11 +114,11 @@ async function joinRoom(code) {
   const name = readName();
   if (!name) return;
   code = cleanCode(code);
-  if (code.length !== 5) { homeStatus('Room codes have 5 characters.', true); return; }
+  if (code.length !== 5) { homeStatus(t('hs.codeLength'), true); return; }
   setBusy(true);
-  homeStatus(`Joining room ${code}…`);
+  homeStatus(t('hs.joining', { code }));
   try {
-    link = await openClient(code, { onMessage, onClose: () => lost('The connection to the host was lost, so the room closed.') });
+    link = await openClient(code, { onMessage, onClose: () => lost(t('hs.lost')) });
   } catch (e) {
     setBusy(false);
     homeStatus(e.message, true);
@@ -138,7 +146,7 @@ function onMessage(m) {
   if (!m || typeof m !== 'object') return;
   lastHeard = performance.now();
   if (m.t === 'welcome') { myId = m.id; homeStatus(''); showScreen('lobby'); renderLobby(); }
-  else if (m.t === 'reject') lost(m.reason);
+  else if (m.t === 'reject') lost(m.key ? t(m.key, m) : m.reason);
   else if (m.t === 'room') { room = m; syncCountdown(); if (game.phase === 'lobby') renderLobby(); else renderBoard(); }
   else if (m.t === 'phase') onPhase(m);
   else if (m.t === 'snap') onSnap(m);
@@ -153,7 +161,7 @@ function syncHome() {
   const code = cleanCode(location.hash.slice(1));
   $('join-box').hidden = code.length !== 5;
   $('create-box').hidden = code.length === 5;
-  $('join').textContent = `Join room ${code}`;
+  $('join').textContent = t('hs.joinRoomCode', { code });
 }
 $('create').addEventListener('click', createRoom);
 $('join').addEventListener('click', () => joinRoom(location.hash.slice(1)));
@@ -174,14 +182,19 @@ const myTeam = () => (playerById(myId) || {}).team;
 const isHost = () => myId === HOST_ID;
 
 for (const s of HIDE_CHOICES) $('set-hide').add(new Option(`${s} s`, s));
-for (const s of SEEK_CHOICES) $('set-seek').add(new Option(s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s / 60} min`, s));
-for (const s of CATCH_CHOICES) $('set-catch').add(new Option(`${s} s`, s));
+for (const s of SEEK_CHOICES) $('set-seek').add(new Option('', s));
+for (const s of CATCH_CHOICES) $('set-catch').add(new Option('', s));
+// Option texts that change with the language.
+function labelOptions() {
+  for (const o of $('set-seek').options) { const s = Number(o.value); o.textContent = s % 60 ? t('hs.minSec', { m: Math.floor(s / 60), s: s % 60 }) : t('hs.min', { m: s / 60 }); }
+  for (const o of $('set-catch').options) o.textContent = `${num(Number(o.value))} s`;
+}
+labelOptions();
 // The host's catch delay once known, else the default.
 const catchTime = () => (game.settings || (room && room.settings) || RULES).catchTime;
 for (const id of ['set-seeker-wards', 'set-hider-wards']) for (const n of WARD_CHOICES) $(id).add(new Option(String(n), n));
 const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-training', 'set-fantasy'];
 const spellOf = (p) => (p && p.category ? SPELLS[p.category] : null);
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function renderLobby() {
   if (!room || !myId) return;
@@ -190,38 +203,41 @@ function renderLobby() {
   for (const team of TEAMS) {
     const list = playerList().filter((p) => p.team === team);
     $('team-' + team).innerHTML = list.length
-      ? list.map((p) => `<li class="${p.id === myId ? 'me' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
-        + `${p.id === room.host ? '<span class="badge">host</span>' : ''}`
-        + `${p.ready ? '<span class="ok">✓ ready</span>' : '<span class="wait">not ready</span>'}</li>`).join('')
-      : '<li class="empty">Nobody yet</li>';
+      ? list.map((p) => `<li class="${p.id === myId ? 'me' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${you(p.id)}</span>`
+        + `${p.id === room.host ? `<span class="badge">${t('hs.host')}</span>` : ''}`
+        + `${p.ready ? `<span class="ok">${t('hs.isReady')}</span>` : `<span class="wait">${t('hs.notReady')}</span>`}</li>`).join('')
+      : `<li class="empty">${t('hs.nobody')}</li>`;
     const btn = document.querySelector(`[data-team="${team}"]`);
     btn.disabled = me && me.team === team;
     btn.classList.toggle('mine', !!me && me.team === team);
-    btn.textContent = me && me.team === team ? 'Your team' : `Join ${TEAM_LABEL[team]}`;
+    btn.textContent = me && me.team === team ? t('hs.yourTeam') : t('hs.joinTeam', { team: teamName(team) });
   }
   if (me && document.activeElement !== $('lobby-name')) $('lobby-name').value = me.name;
   renderChampions();
   setSplash(me && me.champion);
-  $('ready').textContent = me && me.ready ? 'Ready ✓' : 'Ready';
+  $('ready').textContent = me && me.ready ? t('hs.readyOn') : t('hs.ready');
   $('ready').classList.toggle('on', !!(me && me.ready));
   $('ready').disabled = !(me && me.champion);
-  $('ready').title = me && me.champion ? '' : 'Pick a champion first';
+  $('ready').title = me && me.champion ? '' : t('hs.pickFirst');
 
   const s = room.settings;
   $('set-hide').value = s.hide;
   $('set-seek').value = s.seek;
   $('set-catch').value = s.catchTime;
-  $('rule-catch').textContent = s.catchTime;
+  $('rule-catch').textContent = num(s.catchTime);
   $('set-seeker-wards').value = s.seekerWards;
   $('set-hider-wards').value = s.hiderWards;
   $('set-training').checked = s.training;
   $('set-fantasy').checked = s.fantasy;
   $('rule-fantasy').hidden = !s.fantasy;
-  $('rule-fantasy').innerHTML = '<strong>Fantasy:</strong> press <kbd>E</kbd> to cast your champion\'s spell, set by its class. '
-    + Object.entries(SPELLS).map(([c, sp]) => `${c}, <em>${sp.name}</em>: ${sp.text[0].toLowerCase()}${sp.text.slice(1, -1)} (${sp.cooldown} s)`).join(' · ') + '.';
+  $('rule-fantasy').innerHTML = t('hs.rule.fantasy') + ' '
+    + Object.entries(SPELLS).map(([c, sp]) => {
+      const text = spellText(c, 'text');
+      return t('hs.rule.spell', { cat: t('cat.' + c), name: spellText(c, 'name'), text: text[0].toLowerCase() + text.slice(1, -1), cd: sp.cooldown });
+    }).join(' · ') + '.';
   for (const id of SETTING_INPUTS) $(id).disabled = !isHost();
-  $('rule-wards').textContent = `Seekers get ${plural(s.seekerWards, 'Stealth Ward')} each, hiders ${s.hiderWards}.`;
-  $('settings-note').textContent = isHost() ? '(you are the host)' : '(set by the host)';
+  $('rule-wards').textContent = t('hs.rule.wards', { wards: t('hs.stealthWards', { n: s.seekerWards }), n: s.hiderWards });
+  $('settings-note').textContent = isHost() ? t('hs.youHost') : t('hs.byHost');
   lobbyStatus();
 }
 
@@ -232,15 +248,15 @@ function lobbyStatus() {
   el.className = 'status-line';
   if (room.countdown !== null && countdownEnd) {
     el.className = 'status-line go';
-    el.textContent = `Everyone is ready. Starting in ${Math.max(1, Math.ceil((countdownEnd - performance.now()) / 1000))}…`;
+    el.textContent = t('hs.starting', { n: Math.max(1, Math.ceil((countdownEnd - performance.now()) / 1000)) });
   } else if (list.length < 2 || !TEAMS.every((t) => list.some((p) => p.team === t))) {
-    el.textContent = 'Waiting for players: each team needs at least one. Share the invite link.';
+    el.textContent = t('hs.needPlayers');
   } else {
     const noChamp = list.filter((p) => !p.champion).map((p) => p.name);
     const waiting = list.filter((p) => p.champion && !p.ready).map((p) => p.name);
     el.textContent = [
-      noChamp.length ? `${noChamp.join(', ')} must pick a champion.` : '',
-      waiting.length ? `Waiting for ${waiting.join(', ')} to be ready.` : '',
+      noChamp.length ? t('hs.mustPick', { names: noChamp.join(', '), n: noChamp.length }) : '',
+      waiting.length ? t('hs.waitReady', { names: waiting.join(', '), n: waiting.length }) : '',
     ].filter(Boolean).join(' ');
   }
 }
@@ -277,17 +293,24 @@ function setSplash(id) {
   document.body.style.setProperty('--splash', id ? `url("${splashUrl(id)}")` : 'none');
 }
 
-loadChampions().then((list) => {
+// Loads the champion list with names in the current language. Runs again on
+// a language change; ids and classes stay the same.
+async function showChampions() {
+  const wanted = lang();
+  const list = await loadChampions(wanted);
+  if (wanted !== lang()) return; // switched again while loading
+  const first = !champions.length;
   champions = list;
   for (const c of list) { champById.set(c.id, c); const cat = categoryOf(c.tags); if (cat) categories.set(c.id, cat); }
-  if (server) server.broadcastRoom();
+  if (server && first) server.broadcastRoom();
   $('champ-grid').innerHTML = list.length
     ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><span class="pic"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48">`
       + `${categoryIcon(categoryOf(c.tags), 'on-tile')}</span><span class="nm">${escapeHtml(c.name)}</span></button>`).join('')
-    : '<p class="empty">Could not load the champion list from Riot\'s servers. Reload the page to try again: a champion is needed to be ready.</p>';
+    : `<p class="empty">${t('hs.champFailed')}</p>`;
   filterChampions();
   if (room) { renderLobby(); renderBoard(); }
-});
+}
+showChampions();
 
 function renderChampions() {
   const mine = (playerById(myId) || {}).champion;
@@ -297,9 +320,9 @@ function renderChampions() {
     b.classList.toggle('picked', id === mine);
     b.classList.toggle('taken', !!by);
     b.disabled = !!by;
-    b.title = by ? `${name} (picked by ${by})` : name;
+    b.title = by ? t('hs.pickedBy', { name, by }) : name;
   }
-  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one to be ready';
+  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : t('hs.pickOne');
   $('champ-box').classList.toggle('no-fantasy', !fantasyOn());
   renderSpellCard();
 }
@@ -311,21 +334,23 @@ function renderSpellCard() {
   $('spell-card').hidden = !sp;
   if (!sp) return;
   // Always four stat tiles, so every card has the same size.
-  const stats = spellStats(sp).map(([k, v]) => `<span>${v}<em>${k}</em></span>`);
+  const stats = spellStats(sp, num).map(([k, v]) => `<span>${v}<em>${t('stat.' + k)}</em></span>`);
   while (stats.length < 4) stats.push('<span class="empty"></span>');
-  const html = `<div class="sc-head">${categoryIcon(p.category, 'big')}<div>`
-    + `<div class="sc-title"><strong>${sp.name}</strong> <span class="muted">· ${p.category} spell · <kbd>E</kbd></span></div>`
-    + `<div class="sc-text">${sp.text.replace(/(\d) s\b/g, '$1&nbsp;s')}</div></div></div>`
+  const c = p.category;
+  const html = `<div class="sc-head">${categoryIcon(c, 'big')}<div>`
+    + `<div class="sc-title"><strong>${spellText(c, 'name')}</strong> <span class="muted">· ${t('spell.class', { cat: t('cat.' + c) })} · <kbd>E</kbd></span></div>`
+    + `<div class="sc-text">${spellText(c, 'text').replace(/(\d) s\b/g, '$1&nbsp;s')}</div></div></div>`
     + `<div class="sc-stats">${stats.join('')}</div>`
-    + `<div class="sc-roles"><div><h3>As a hider</h3><p>${sp.hider}</p></div><div><h3>As a seeker</h3><p>${sp.seeker}</p></div></div>`;
+    + `<div class="sc-roles"><div><h3>${t('spell.asHider')}</h3><p>${spellText(c, 'hider')}</p></div>`
+    + `<div><h3>${t('spell.asSeeker')}</h3><p>${spellText(c, 'seeker')}</p></div></div>`;
   if ($('spell-card').innerHTML !== html) $('spell-card').innerHTML = html;
 }
 
 function filterChampions() {
-  const q = $('champ-search').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const q = searchKey($('champ-search').value);
   for (const b of $('champ-grid').querySelectorAll('[data-champ]')) {
     const c = champById.get(b.dataset.champ);
-    b.hidden = !!q && !c.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(q);
+    b.hidden = !!q && !searchKey(c.name).includes(q);
   }
 }
 
@@ -357,9 +382,9 @@ const sendSettings = () => send({
 for (const id of SETTING_INPUTS) $(id).addEventListener('change', sendSettings);
 $('copy-link').addEventListener('click', async () => {
   const url = location.origin + location.pathname + location.search + '#' + roomCode;
-  try { await navigator.clipboard.writeText(url); $('copy-link').textContent = 'Link copied'; }
+  try { await navigator.clipboard.writeText(url); $('copy-link').textContent = t('hs.copied'); }
   catch { $('copy-link').textContent = url; }
-  setTimeout(() => { $('copy-link').textContent = 'Copy invite link'; }, 2000);
+  setTimeout(() => { $('copy-link').textContent = t('hs.copyInvite'); }, 2000);
 });
 
 // ---------------------------------------------------------------- game state
@@ -405,11 +430,9 @@ function onPhase(m) {
     camera.follow = true;
     if (prev === 'lobby' || prev === 'break') camera.scale = Math.min(view.w, view.h) / 4200;
     camera.x = me.x; camera.z = me.z;
-    feed(isSeeker()
-      ? `Round ${m.round}: you seek. Hiders have ${m.ms / 1000} s to hide.`
-      : `Round ${m.round}: you hide! Get out of sight in ${m.ms / 1000} s.`);
+    feed(t(isSeeker() ? 'hs.feed.youSeek' : 'hs.feed.youHide', { round: m.round, s: m.ms / 1000 }));
   } else if (m.phase === 'seek') {
-    feed(isSeeker() ? 'Go! Find the hiders.' : 'The seekers are out. Stay out of their sight.');
+    feed(t(isSeeker() ? 'hs.feed.go' : 'hs.feed.seekersOut'));
   }
   sourcesKey = '';
   renderBoard();
@@ -445,8 +468,8 @@ function onCaught(m) {
   const who = playerById(m.id), by = playerById(m.by);
   const name = (p, fallback) => (p ? escapeHtml(p.name) : fallback);
   if (m.id === myId) { me.caught = true; path = []; }
-  if (m.id === myId) feed(`You were caught by ${name(by, 'a ward')}! Now spectating.`);
-  else feed(`${name(who, 'A hider')} was caught by ${m.by === myId ? 'you' : name(by, 'a ward')}.`);
+  if (m.id === myId) feed(t('hs.feed.youCaught', { by: name(by, t('hs.feed.aWard')) }));
+  else feed(t('hs.feed.caught', { who: name(who, t('hs.feed.aHider')), by: m.by === myId ? t('hs.feed.byYou') : name(by, t('hs.feed.aWard')) }));
   const o = others.get(m.id);
   if (o) o.caught = true;
   renderBoard();
@@ -464,13 +487,13 @@ function onSpell(m) {
     me.surgeUntil = now + m.ms;
   } else if (m.category === 'Tank') {
     effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 1200 });
-    if (m.hit.includes(myId)) { me.rootUntil = now + m.ms; path = []; feed(`Rooted by ${who ? escapeHtml(who.name) : 'a Tank'}!`); }
-    else if (mine) feed(m.hit.length ? `Earthshaker rooted ${m.hit.length} ${m.hit.length === 1 ? 'enemy' : 'enemies'}.` : 'Earthshaker hit nobody.');
+    if (m.hit.includes(myId)) { me.rootUntil = now + m.ms; path = []; feed(t('hs.feed.rooted', { who: who ? escapeHtml(who.name) : t('hs.feed.aTank') })); }
+    else if (mine) feed(t(m.hit.length ? 'hs.feed.rootHit' : 'hs.feed.rootMiss', { spell: spellText('Tank', 'name'), n: m.hit.length }));
   } else if (m.category === 'Marksman') {
     effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 600 });
   } else if (m.category === 'Support' && (mine || m.team === myTeam())) {
     effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 800 });
-    if (mine) feed(m.swept ? `Sweep destroyed ${plural(m.swept, 'ward')}: +${m.swept} for you.` : 'Sweep found no enemy ward.');
+    if (mine) feed(t(m.swept ? 'hs.feed.swept' : 'hs.feed.sweptNone', { spell: spellText('Support', 'name'), n: m.swept }));
   }
   needsDraw = true;
 }
@@ -678,23 +701,26 @@ function drawChampion(x0, z0, p, s, isMe) {
 function renderHud() {
   const hud = $('hud');
   const left = game.endsAt - performance.now();
-  const seekName = game.seekTeam ? TEAM_LABEL[game.seekTeam] : '';
+  const seekName = game.seekTeam ? teamName(game.seekTeam) : '';
+  const time = `<span class="time">${clock(left)}</span>`;
   let cls = 'hud', html = '';
   if (game.phase === 'hide') {
+    const round = t('hs.hud.round', { round: game.round });
     html = isSeeker()
-      ? `Round ${game.round} · <span class="time">${clock(left)}</span> · Hiders are hiding. You are held in your fountain.`
-      : `Round ${game.round} · <span class="time">${clock(left)}</span> · Hide! ${seekName} is released after this.${me.wards ? ` · Wards ${me.wards} (W)` : ''}`;
+      ? `${round} · ${time} · ${t('hs.hud.held')}`
+      : `${round} · ${time} · ${t('hs.hud.hide', { team: seekName })}${me.wards ? ` · ${t('hs.hud.wardsKey', { n: me.wards })}` : ''}`;
   } else if (game.phase === 'seek') {
     const hiders = playerList().filter((p) => p.team !== game.seekTeam);
     const caught = hiders.filter((p) => (p.id === myId ? me.caught : (others.get(p.id) || {}).caught)).length;
-    if (isSeeker()) html = `Seek · <span class="time">${clock(left)}</span> · Caught ${caught}/${hiders.length} · Wards ${me.wards}`;
-    else if (me.caught) html = `Caught · spectating · <span class="time">${clock(left)}</span> · ${caught}/${hiders.length} caught`;
-    else if (me.spot > 0) { cls += ' seen'; html = `<strong>Spotted!</strong> Break their sight · <span class="time">${clock(left)}</span>`; }
-    else { cls += ' hidden-ok'; html = `<strong>Hidden</strong> · <span class="time">${clock(left)}</span> · ${hiders.length - caught} hider${hiders.length - caught === 1 ? '' : 's'} left${me.wards ? ` · Wards ${me.wards}` : ''}`; }
+    const total = hiders.length;
+    if (isSeeker()) html = `${t('hs.hud.seek')} · ${time} · ${t('hs.hud.caught', { c: caught, t: total })} · ${t('hs.hud.wards', { n: me.wards })}`;
+    else if (me.caught) html = `${t('hs.hud.spectating')} · ${time} · ${t('hs.hud.caughtCount', { c: caught, t: total })}`;
+    else if (me.spot > 0) { cls += ' seen'; html = `${t('hs.hud.spotted')} · ${time}`; }
+    else { cls += ' hidden-ok'; html = `${t('hs.hud.hidden')} · ${time} · ${t('hs.hud.left', { n: total - caught })}${me.wards ? ` · ${t('hs.hud.wards', { n: me.wards })}` : ''}`; }
   } else if (game.phase === 'break') {
-    html = `Round 2 in <span class="time">${clock(left)}</span>`;
+    html = t('hs.hud.break', { t: time });
   } else if (game.phase === 'results') {
-    html = 'Game over';
+    html = t('hs.hud.over');
   }
   hud.className = cls;
   if (hud.innerHTML !== html) hud.innerHTML = html;
@@ -704,20 +730,20 @@ function renderHud() {
   if (showMeter) {
     const pct = Math.min(100, Math.round((100 * me.spot) / catchTime()));
     $('meter').firstChild.style.width = pct + '%';
-    $('meter').lastChild.textContent = `Spotted ${pct}%`;
+    $('meter').lastChild.textContent = t('hs.meter', { pct });
   }
 }
 
 function renderBoard() {
   if (game.phase === 'lobby') return;
   const rows = TEAMS.map((team) => {
-    const role = team === game.seekTeam ? 'seeking' : 'hiding';
+    const role = t(team === game.seekTeam ? 'hs.board.seeking' : 'hs.board.hiding');
     const items = playerList().filter((p) => p.team === team).map((p) => {
       const out = p.id === myId ? me.caught : (others.get(p.id) || {}).caught;
-      return `<li class="${out && playing() ? 'out' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
-        + `<span class="tag">${out && playing() ? 'caught' : ''}</span></li>`;
+      return `<li class="${out && playing() ? 'out' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${you(p.id)}</span>`
+        + `<span class="tag">${out && playing() ? t('hs.board.caught') : ''}</span></li>`;
     }).join('');
-    return `<h2 class="${team}">${TEAM_LABEL[team]}${playing() ? ` <span class="muted">· ${role}</span>` : ''}</h2><ul>${items}</ul>`;
+    return `<h2 class="${team}">${teamName(team)}${playing() ? ` <span class="muted">· ${role}</span>` : ''}</h2><ul>${items}</ul>`;
   }).join('');
   if ($('board').innerHTML !== rows) $('board').innerHTML = rows;
 }
@@ -727,13 +753,14 @@ function syncButtons() {
   const allowance = game.settings ? (isSeeker() ? game.settings.seekerWards : game.settings.hiderWards) : 0;
   $('ward-btn').hidden = !(playing() && allowance > 0);
   $('ward-btn').disabled = !canWard;
-  $('ward-btn').textContent = `Ward (W) · ${me.wards}`;
+  $('ward-btn').textContent = t('hs.wardBtn.count', { n: me.wards });
   const sp = mySpell();
   $('spell-btn').hidden = !(playing() && sp);
   if (sp) {
     $('spell-btn').disabled = !canCast();
-    $('spell-btn').textContent = me.cd > 0 ? `${sp.name} (E) · ${Math.ceil(me.cd)} s` : `${sp.name} (E)`;
-    $('spell-btn').title = `${playerById(myId).category}: ${sp.text} Cooldown ${sp.cooldown} s.`;
+    const c = playerById(myId).category, name = spellText(c, 'name');
+    $('spell-btn').textContent = me.cd > 0 ? t('hs.spellBtn.cd', { name, s: Math.ceil(me.cd) }) : t('hs.spellBtn.name', { name });
+    $('spell-btn').title = t('hs.spellBtn.info', { cat: t('cat.' + c), text: spellText(c, 'text'), cd: sp.cooldown });
   }
   $('follow-btn').classList.toggle('on', camera.follow);
 }
@@ -742,16 +769,17 @@ function resultTable(r) {
   const rows = r.players.slice().sort((a, b) => (a.role === b.role ? 0 : a.role === 'seek' ? -1 : 1)).map((p) => {
     const by = r.players.find((q) => q.id === p.caughtBy);
     const detail = p.role === 'seek'
-      ? `${p.catches} catch${p.catches === 1 ? '' : 'es'}`
-      : p.caughtAt !== null ? `caught at ${secs(p.caughtAt)}${by ? ' by ' + escapeHtml(by.name) : ''}` : `survived ${secs(p.survived)}`;
-    return `<tr><td>${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</td><td>${teamSpan(p.team)}</td><td>${p.role === 'seek' ? 'Seeker' : 'Hider'}</td>`
+      ? t('hs.res.catches', { n: p.catches })
+      : p.caughtAt !== null ? t('hs.res.caughtAt', { t: secs(p.caughtAt) }) + (by ? t('hs.res.by', { name: escapeHtml(by.name) }) : '') : t('hs.res.survived', { t: secs(p.survived) });
+    return `<tr><td>${escapeHtml(p.name)}${you(p.id)}</td><td>${teamSpan(p.team)}</td><td>${t(p.role === 'seek' ? 'hs.res.seeker' : 'hs.res.hider')}</td>`
       + `<td>${detail}</td><td class="num">${p.role === 'hide' ? secs(p.spotted) : ''}</td></tr>`;
   }).join('');
-  return `<table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Result</th><th class="num">Time spotted</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table><thead><tr><th>${t('hs.res.player')}</th><th>${t('hs.res.team')}</th><th>${t('hs.res.role')}</th><th>${t('hs.res.result')}</th>`
+    + `<th class="num">${t('hs.res.spotted')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-const roundLine = (r) => `${teamSpan(r.seekTeam)} caught <strong>${r.caught}/${r.total}</strong> hider${r.total === 1 ? '' : 's'}`
-  + (r.total && r.caught === r.total ? ` in ${secs(r.time)}` : '');
+const roundLine = (r) => t('hs.res.roundLine', { team: teamSpan(r.seekTeam), c: r.caught, n: r.total })
+  + (r.total && r.caught === r.total ? t('hs.res.inTime', { t: secs(r.time) }) : '');
 
 function renderOverlay() {
   const el = $('overlay');
@@ -760,12 +788,12 @@ function renderOverlay() {
   const card = $('overlay-card');
   if (game.phase === 'break') {
     const r = game.results[0];
-    card.innerHTML = `<h1>Round 1 over</h1><p class="big">${roundLine(r)}</p>${resultTable(r)}`
-      + `<p class="muted">Round 2 starts in <span id="break-left"></span>: ${teamSpan(otherTeam(r.seekTeam))} seeks, ${teamSpan(r.seekTeam)} hides.</p>`;
+    card.innerHTML = `<h1>${t('hs.res.round1Over')}</h1><p class="big">${roundLine(r)}</p>${resultTable(r)}`
+      + `<p class="muted">${t('hs.res.round2', { seek: teamSpan(otherTeam(r.seekTeam)), hide: teamSpan(r.seekTeam) })}</p>`;
     return;
   }
   const w = game.winner;
-  const head = !w ? 'Game over' : w === 'draw' ? 'Draw!' : `${teamSpan(w)} wins!`;
+  const head = !w ? t('hs.hud.over') : w === 'draw' ? t('hs.res.draw') : t('hs.res.wins', { team: teamSpan(w) });
   const totals = new Map();
   for (const r of game.results) for (const p of r.players) {
     const t = totals.get(p.id) || { name: p.name, team: p.team, catches: 0, survived: 0, spotted: 0 };
@@ -774,13 +802,15 @@ function renderOverlay() {
     totals.set(p.id, t);
   }
   const totalRows = [...totals.entries()].sort((a, b) => b[1].catches - a[1].catches || b[1].survived - a[1].survived)
-    .map(([id, t]) => `<tr><td>${escapeHtml(t.name)}${id === myId ? ' (you)' : ''}</td><td>${teamSpan(t.team)}</td>`
-      + `<td class="num">${t.catches}</td><td class="num">${secs(t.survived)}</td><td class="num">${secs(t.spotted)}</td></tr>`).join('');
+    .map(([id, tot]) => `<tr><td>${escapeHtml(tot.name)}${you(id)}</td><td>${teamSpan(tot.team)}</td>`
+      + `<td class="num">${tot.catches}</td><td class="num">${secs(tot.survived)}</td><td class="num">${secs(tot.spotted)}</td></tr>`).join('');
   card.innerHTML = `<h1>${head}</h1>`
-    + game.results.map((r) => `<p class="big">Round ${r.round}: ${roundLine(r)}</p>`).join('')
-    + `<table><thead><tr><th>Player</th><th>Team</th><th class="num">Catches</th><th class="num">Survived</th><th class="num">Time spotted</th></tr></thead><tbody>${totalRows}</tbody></table>`
-    + '<p class="muted">The team that caught the larger share of hiders wins; on a tie, the faster team.</p>'
-    + `<div class="actions"><a class="back" href="./">Leave</a>${isHost() ? '<button id="rematch" class="primary">Back to lobby</button>' : '<span class="muted">Waiting for the host to start a rematch…</span>'}</div>`;
+    + game.results.map((r) => `<p class="big">${t('hs.res.round', { round: r.round, line: roundLine(r) })}</p>`).join('')
+    + `<table><thead><tr><th>${t('hs.res.player')}</th><th>${t('hs.res.team')}</th><th class="num">${t('hs.res.catchCol')}</th>`
+    + `<th class="num">${t('hs.res.survivedCol')}</th><th class="num">${t('hs.res.spotted')}</th></tr></thead><tbody>${totalRows}</tbody></table>`
+    + `<p class="muted">${t('hs.rule.win')}</p>`
+    + `<div class="actions"><a class="back" href="./">${t('hs.res.leave')}</a>`
+    + `${isHost() ? `<button id="rematch" class="primary">${t('hs.res.rematch')}</button>` : `<span class="muted">${t('hs.res.waitHost')}</span>`}</div>`;
   const btn = $('rematch');
   if (btn) btn.addEventListener('click', () => send({ t: 'lobby' }));
 }
@@ -846,7 +876,7 @@ function tick(now) {
   } else if (path.length && !canMove() && !(game.phase === 'hide')) path = [];
 
   // Report our position (and keep the connection alive in the lobby).
-  if (link && myId && !server && now - lastHeard > TIMEOUT * 1000) lost('The host stopped responding, so the room closed.');
+  if (link && myId && !server && now - lastHeard > TIMEOUT * 1000) lost(t('hs.timeout'));
   if (link && myId) {
     const pos = `${Math.round(me.x)},${Math.round(me.z)}`;
     if (playing() && now - lastSend > 1000 / NET_RATE && (pos !== lastSentPos || now - lastSend > 1000)) {
@@ -967,6 +997,16 @@ window.addEventListener('resize', resize);
 // ---------------------------------------------------------------- start
 
 syncHome();
+// A language switch redraws everything the script wrote; feed lines already shown stay as they are.
+onLangChange(() => {
+  labelOptions();
+  syncHome();
+  showChampions();
+  if (room) renderLobby();
+  renderBoard();
+  renderOverlay();
+  syncButtons();
+});
 document.body.classList.remove('loading');
 requestAnimationFrame(tick);
 

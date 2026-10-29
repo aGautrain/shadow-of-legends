@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES } from '../../src/hideseek/rules.js';
 import { SPELLS, categoryOf, blinkTarget, spellStats } from '../../src/hideseek/spells.js';
+import { LANGS, STRINGS } from '../../src/i18n.js';
 import { makeRoom, openGrid, at, HOST_ID } from '../helpers.js';
 
 const HIDE = RULES.hide;
@@ -46,8 +47,8 @@ test('the spells have the agreed numbers', () => {
 });
 
 test('each spell explains itself for hiders and seekers, with its numbers', () => {
-  for (const sp of Object.values(SPELLS)) {
-    assert.ok(sp.text && sp.hider && sp.seeker, sp.name);
+  for (const [category, sp] of Object.entries(SPELLS)) {
+    for (const l of LANGS) for (const field of ['name', 'text', 'hider', 'seeker']) assert.ok(STRINGS[l][`spell.${category}.${field}`], `${l} ${category} ${field}`);
     assert.deepEqual(spellStats(sp)[0], ['Cooldown', `${sp.cooldown} s`]);
   }
   assert.deepEqual(spellStats(SPELLS.Tank), [['Cooldown', '40 s'], ['Radius', '1000'], ['Root', '1.5 s']]);

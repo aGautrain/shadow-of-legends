@@ -1,55 +1,58 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shadow of Legends</title>
-  <meta name="description" content="Learn fog of war on Summoner's Rift: walk the map and see what the enemy team can see.">
+  <meta name="description" data-i18n-attr="content:land.desc" content="Apprenez le brouillard de guerre sur la Faille de l'invocateur : parcourez la carte et voyez ce que l'équipe ennemie voit.">
   <script>
     // Share links made before modes existed point at the root with the
     // scenario in the hash. Send them to the Pedagogic mode, which owns it.
     if (location.hash.length > 1) location.replace('pedagogic/' + location.hash);
   </script>
   <link rel="stylesheet" href="src/landing.css">
+  <link rel="stylesheet" href="src/lang.css">
 </head>
 <body>
   <main>
     <header>
+      <div class="lang-switch" data-lang-switch></div>
       <h1>Shadow of Legends</h1>
-      <p class="sub">Fog of war trainer for Summoner's Rift</p>
-      <p class="lead">Walk the real map and see, live, what the enemy team can see. Pick a mode to start.</p>
+      <p class="sub" data-i18n="land.sub">Entraînement au brouillard de guerre sur la Faille de l'invocateur</p>
+      <p class="lead" data-i18n="land.lead">Parcourez la vraie carte et voyez, en direct, ce que l'équipe ennemie voit. Choisissez un mode pour commencer.</p>
     </header>
 
     <ul class="modes">
       <li>
         <a class="mode" href="pedagogic/">
-          <span class="tag live">Available</span>
-          <h2>Pedagogic</h2>
-          <p>Place enemy champions and wards, then move around and watch where you are seen. Tune sight radii, objectives and turrets, and share a setup as a link.</p>
-          <span class="go">Open →</span>
+          <span class="tag live" data-i18n="land.available">Disponible</span>
+          <h2 data-i18n="land.ped.name">Pédagogique</h2>
+          <p data-i18n="land.ped.text">Placez des champions et des balises ennemis, puis déplacez-vous et regardez où vous êtes vu. Réglez les rayons de vision, les objectifs et les tourelles, et partagez une configuration par lien.</p>
+          <span class="go" data-i18n="land.open">Ouvrir →</span>
         </a>
       </li>
       <li>
         <a class="mode" href="hide-and-seek/">
-          <span class="tag live">Multiplayer</span>
-          <h2>Hide and seek</h2>
-          <p>Two teams, two rounds. Hiders slip into the fog and brush, seekers hunt them with their vision and wards. Create a room, share the link, and play with friends.</p>
-          <span class="go">Play →</span>
+          <span class="tag live" data-i18n="land.multi">Multijoueur</span>
+          <h2 data-i18n="land.hs.name">Cache-cache</h2>
+          <p data-i18n="land.hs.text">Deux équipes, deux manches. Les cachés se glissent dans le brouillard et les buissons, les chercheurs les traquent avec leur vision et leurs balises. Créez un salon, partagez le lien et jouez entre amis.</p>
+          <span class="go" data-i18n="land.play">Jouer →</span>
         </a>
       </li>
       <li>
         <div class="mode soon" aria-disabled="true">
-          <span class="tag">Coming soon</span>
-          <h2>More modes</h2>
-          <p>New ways to practice vision are on the way.</p>
+          <span class="tag" data-i18n="land.soon">Bientôt</span>
+          <h2 data-i18n="land.more.name">D'autres modes</h2>
+          <p data-i18n="land.more.text">De nouvelles façons de travailler la vision arrivent.</p>
         </div>
       </li>
     </ul>
 
     <footer>
-      <p><a href="https://github.com/aGautrain/shadow-of-legends">Source and plan</a></p>
-      <p class="legal">Shadow of Legends isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+      <p><a href="https://github.com/aGautrain/shadow-of-legends" data-i18n="source">Code source et plan</a></p>
+      <p class="legal" data-i18n="legal">Shadow of Legends n'est pas approuvé par Riot Games et ne reflète pas les opinions de Riot Games ni de quiconque officiellement impliqué dans la production ou la gestion des propriétés de Riot Games. Riot Games et toutes les propriétés associées sont des marques commerciales ou des marques déposées de Riot Games, Inc.</p>
     </footer>
   </main>
+  <script type="module" src="src/lang.js"></script>
 </body>
 </html>

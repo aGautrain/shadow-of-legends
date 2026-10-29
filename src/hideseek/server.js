@@ -105,8 +105,8 @@ export class Server {
 
   hello(id, m) {
     if (this.players.has(id)) return;
-    if (this.phase !== 'lobby') return this.send(id, { t: 'reject', reason: 'A game is in progress in this room. Wait for it to end and reload.' });
-    if (this.players.size >= RULES.maxPlayers) return this.send(id, { t: 'reject', reason: `This room is full (${RULES.maxPlayers} players).` });
+    if (this.phase !== 'lobby') return this.send(id, { t: 'reject', reason: 'A game is in progress in this room. Wait for it to end and reload.', key: 'reject.inProgress' });
+    if (this.players.size >= RULES.maxPlayers) return this.send(id, { t: 'reject', reason: `This room is full (${RULES.maxPlayers} players).`, key: 'reject.full', max: RULES.maxPlayers });
     const count = (t) => [...this.players.values()].filter((p) => p.team === t).length;
     const team = TEAMS.includes(m.team) ? m.team : count('blue') <= count('red') ? 'blue' : 'red';
     this.players.set(id, {
