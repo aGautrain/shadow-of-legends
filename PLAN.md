@@ -109,7 +109,12 @@ where the fog hides people.
 
 1. **Lobby.** One player creates a room and shares its link
    (`hide-and-seek/#CODE`). Everyone who opens it picks a name and a team
-   (Blue or Red) and clicks Ready. When every player is ready and both teams
+   (Blue or Red), optionally picks a champion, and clicks Ready. Every
+   champion of the live game is offered (list, portraits and splash art come
+   from Riot's Data Dragon CDN at runtime, so new champions appear on their
+   own); a champion can be taken by one player only. The champion is
+   cosmetic: its portrait is your token on the map and its splash art is your
+   background. When every player is ready and both teams
    have at least one player, a 3 s countdown starts the game. Unreadying or a
    team going empty cancels it. The room creator (the host) can change the
    round settings while everyone is in the lobby.
@@ -180,6 +185,7 @@ Message flow (JSON over one reliable data channel per player):
 - `src/hideseek/server.js`: host-side room, phases, catching, scores.
 - `src/hideseek/game.js`: lobby UI, map rendering, input, HUD.
 - `src/hideseek/rules.js`: timings and numbers.
+- `src/hideseek/champions.js`: champion list and art from Data Dragon.
 
 ### Later
 

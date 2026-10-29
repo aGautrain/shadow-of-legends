@@ -9,6 +9,7 @@ import { SIGHT, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from
 import { RULES, HIDE_CHOICES, SEEK_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
+import { loadChampions, splashUrl } from './champions.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('map');
@@ -180,7 +181,7 @@ function renderLobby() {
   for (const team of TEAMS) {
     const list = playerList().filter((p) => p.team === team);
     $('team-' + team).innerHTML = list.length
-      ? list.map((p) => `<li class="${p.id === myId ? 'me' : ''}"><span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
+      ? list.map((p) => `<li class="${p.id === myId ? 'me' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
         + `${p.id === room.host ? '<span class="badge">host</span>' : ''}`
         + `${p.ready ? '<span class="ok">✓ ready</span>' : '<span class="wait">not ready</span>'}</li>`).join('')
       : '<li class="empty">Nobody yet</li>';
@@ -190,6 +191,8 @@ function renderLobby() {
     btn.textContent = me && me.team === team ? 'Your team' : `Join ${TEAM_LABEL[team]}`;
   }
   if (me && document.activeElement !== $('lobby-name')) $('lobby-name').value = me.name;
+  renderChampions();
+  setSplash(me && me.champion);
   $('ready').textContent = me && me.ready ? 'Ready ✓' : 'Ready';
   $('ready').classList.toggle('on', !!(me && me.ready));
 
@@ -217,6 +220,72 @@ function lobbyStatus() {
     el.textContent = `Waiting for ${waiting.join(', ')} to be ready.`;
   }
 }
+// ---------------------------------------------------------------- champions
+
+let champions = []; // [{ id, name, icon }] once Data Dragon answers
+const champById = new Map();
+const iconImages = new Map(); // id -> Image, for drawing on the map
+
+function avatar(p) {
+  const c = p && champById.get(p.champion);
+  return c ? `<img class="av" src="${c.icon}" alt="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}">` : '';
+}
+
+function iconImage(id) {
+  const c = champById.get(id);
+  if (!c) return null;
+  let img = iconImages.get(id);
+  if (!img) { img = new Image(); img.src = c.icon; img.onload = () => { needsDraw = true; }; iconImages.set(id, img); }
+  return img.complete && img.naturalWidth ? img : null;
+}
+
+let splashShown = null;
+function setSplash(id) {
+  id = champById.has(id) ? id : null;
+  if (id === splashShown) return;
+  splashShown = id;
+  document.body.style.setProperty('--splash', id ? `url("${splashUrl(id)}")` : 'none');
+}
+
+loadChampions().then((list) => {
+  champions = list;
+  for (const c of list) champById.set(c.id, c);
+  $('champ-grid').innerHTML = list.length
+    ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48"><span>${escapeHtml(c.name)}</span></button>`).join('')
+    : '<p class="empty">Could not load the champion list from Riot\'s servers. You can still play without one.</p>';
+  filterChampions();
+  if (room) { renderLobby(); renderBoard(); }
+});
+
+function renderChampions() {
+  const mine = (playerById(myId) || {}).champion;
+  const takenBy = new Map(playerList().filter((p) => p.champion && p.id !== myId).map((p) => [p.champion, p.name]));
+  for (const b of $('champ-grid').querySelectorAll('[data-champ]')) {
+    const id = b.dataset.champ, by = takenBy.get(id), name = champById.get(id).name;
+    b.classList.toggle('picked', id === mine);
+    b.classList.toggle('taken', !!by);
+    b.disabled = !!by;
+    b.title = by ? `${name} (picked by ${by})` : name;
+  }
+  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one, or play without';
+  $('champ-clear').hidden = !mine;
+}
+
+function filterChampions() {
+  const q = $('champ-search').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const b of $('champ-grid').querySelectorAll('[data-champ]')) {
+    const c = champById.get(b.dataset.champ);
+    b.hidden = !!q && !c.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(q);
+  }
+}
+
+$('champ-grid').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-champ]');
+  if (b && !b.disabled) send({ t: 'set', champion: b.dataset.champ });
+});
+$('champ-search').addEventListener('input', filterChampions);
+$('champ-clear').addEventListener('click', () => send({ t: 'set', champion: null }));
+
 // The countdown arrives as time left; keep it as a local deadline.
 let countdownEnd = 0;
 const syncCountdown = () => { countdownEnd = room && room.countdown !== null ? performance.now() + room.countdown : 0; };
@@ -418,8 +487,8 @@ const COLORS = { blue: '#4aa8ff', red: '#ff4d5a', me: '#ffd34d', ward: '#ffd84a'
 function draw() {
   clampCamera();
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  ctx.fillStyle = '#0b0f14';
-  ctx.fillRect(0, 0, view.w, view.h);
+  // Transparent outside the map, so your champion's splash art shows there.
+  ctx.clearRect(0, 0, view.w, view.h);
   if (bg.complete && bg.naturalWidth) {
     const [bx, by] = toScreen(BACKGROUND.minX, BACKGROUND.minZ + BACKGROUND.size);
     const bs = BACKGROUND.size * camera.scale;
@@ -465,9 +534,21 @@ function drawChampion(x0, z0, p, s, isMe) {
   const [x, y] = toScreen(x0, z0);
   const r = Math.max(8, 65 * camera.scale);
   ctx.globalAlpha = s.caught ? 0.45 : 1;
-  ctx.fillStyle = isMe ? COLORS.me : COLORS[p.team];
-  ctx.strokeStyle = isMe ? COLORS[p.team] : '#0b0f14'; ctx.lineWidth = isMe ? 3 : 2;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  const icon = iconImage(p.champion);
+  if (icon) {
+    // Champion portrait in a team-colored ring; yours gets a gold outer ring.
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    ctx.drawImage(icon, x - r, y - r, 2 * r, 2 * r);
+    ctx.restore();
+    ctx.strokeStyle = COLORS[p.team]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    if (isMe) { ctx.strokeStyle = COLORS.me; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 3, 0, Math.PI * 2); ctx.stroke(); }
+  } else {
+    ctx.fillStyle = isMe ? COLORS.me : COLORS[p.team];
+    ctx.strokeStyle = isMe ? COLORS[p.team] : '#0b0f14'; ctx.lineWidth = isMe ? 3 : 2;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
   if (s.caught) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x - r * 0.6, y - r * 0.6); ctx.lineTo(x + r * 0.6, y + r * 0.6);
@@ -527,7 +608,7 @@ function renderBoard() {
     const role = team === game.seekTeam ? 'seeking' : 'hiding';
     const items = playerList().filter((p) => p.team === team).map((p) => {
       const out = p.id === myId ? me.caught : (others.get(p.id) || {}).caught;
-      return `<li class="${out && playing() ? 'out' : ''}"><span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
+      return `<li class="${out && playing() ? 'out' : ''}">${avatar(p)}<span class="nm">${escapeHtml(p.name)}${p.id === myId ? ' (you)' : ''}</span>`
         + `<span class="tag">${out && playing() ? 'caught' : ''}</span></li>`;
     }).join('');
     return `<h2 class="${team}">${TEAM_LABEL[team]}${playing() ? ` <span class="muted">· ${role}</span>` : ''}</h2><ul>${items}</ul>`;

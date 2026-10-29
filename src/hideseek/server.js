@@ -5,6 +5,7 @@
 
 import { has } from '../vision.js';
 import { SIGHT } from '../config.js';
+import { validChampionId } from './champions.js';
 import { RULES, HIDE_CHOICES, SEEK_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
 
 export const HOST_ID = 'host';
@@ -58,6 +59,9 @@ export class Server {
       if (m.name !== undefined && cleanName(m.name)) p.name = cleanName(m.name);
       if (TEAMS.includes(m.team) && m.team !== p.team) { p.team = m.team; p.ready = false; }
       if (typeof m.ready === 'boolean') p.ready = m.ready;
+      // Each champion can be picked by one player only; null clears the pick.
+      if (m.champion === null) p.champion = null;
+      else if (validChampionId(m.champion) && ![...this.players.values()].some((q) => q !== p && q.champion === m.champion)) p.champion = m.champion;
       this.broadcastRoom();
       this.checkStart();
     } else if (m.t === 'settings' && id === HOST_ID && this.phase === 'lobby') {
@@ -91,7 +95,7 @@ export class Server {
     const count = (t) => [...this.players.values()].filter((p) => p.team === t).length;
     const team = TEAMS.includes(m.team) ? m.team : count('blue') <= count('red') ? 'blue' : 'red';
     this.players.set(id, {
-      id, name: cleanName(m.name) || 'Player', team, ready: false,
+      id, name: cleanName(m.name) || 'Player', team, ready: false, champion: null,
       x: 0, z: 0, caught: false, spot: 0, wards: 0, lastSeen: performance.now(),
     });
     this.send(id, { t: 'welcome', id });
@@ -103,7 +107,7 @@ export class Server {
     return {
       t: 'room',
       host: HOST_ID,
-      players: [...this.players.values()].map(({ id, name, team, ready }) => ({ id, name, team, ready })),
+      players: [...this.players.values()].map(({ id, name, team, ready, champion }) => ({ id, name, team, ready, champion })),
       settings: this.settings,
       phase: this.phase,
       countdown: this.countdownAt ? Math.max(0, this.countdownAt - performance.now()) : null,
