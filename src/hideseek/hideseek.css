@@ -98,14 +98,22 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .no-fantasy .cls { display: none; }
 .avw { position: relative; display: inline-block; flex: none; line-height: 0; margin-right: 4px; }
 
-.spell-card { margin: 2px 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(24, 33, 46, 0.6); }
-.spell-card .sc-head { display: flex; gap: 10px; align-items: center; }
-.spell-card .sc-head strong { font-size: 15px; }
-.spell-card .sc-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; font-size: 12.5px; }
-.spell-card .sc-stats em { font-style: normal; color: var(--muted); margin-right: 3px; }
+.spell-card { margin: 2px 0 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: rgba(24, 33, 46, 0.6); }
+/* Every line is reserved so the card keeps one size whatever the spell. */
+.spell-card .sc-head { display: flex; gap: 12px; align-items: flex-start; }
+.spell-card .sc-head > div { flex: 1; min-width: 0; }
+.spell-card .sc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+.spell-card .sc-title strong { font-size: 15px; }
+.spell-card .sc-text { font-size: 13px; line-height: 1.4; height: 2.8em; overflow: hidden; }
+.spell-card .sc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0 12px; }
+.spell-card .sc-stats span { padding: 5px 0 4px; text-align: center; border-radius: 6px; background: rgba(11, 15, 20, 0.55);
+  font-size: 13px; font-weight: 600; line-height: 1.3; }
+.spell-card .sc-stats span.empty { background: rgba(11, 15, 20, 0.25); }
+.spell-card .sc-stats em { display: block; font-style: normal; font-weight: 400; font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted); }
 .spell-card .sc-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .spell-card h3 { margin: 0 0 2px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
-.spell-card p { margin: 0; font-size: 13px; }
+.spell-card p { margin: 0; font-size: 13px; line-height: 1.4; height: 4.2em; overflow: hidden; }
 @media (max-width: 560px) { .spell-card .sc-roles { grid-template-columns: 1fr; } }
 /* Wide screens: the card floats right of the lobby column (680 wide,
    centered) instead of pushing the champion grid down. */

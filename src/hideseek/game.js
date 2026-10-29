@@ -310,9 +310,13 @@ function renderSpellCard() {
   const sp = fantasyOn() && spellOf(p);
   $('spell-card').hidden = !sp;
   if (!sp) return;
-  const html = `<div class="sc-head">${categoryIcon(p.category, 'big')}<div><strong>${sp.name}</strong>`
-    + ` <span class="muted">· ${p.category} spell · <kbd>E</kbd></span><div>${sp.text}</div></div></div>`
-    + `<div class="sc-stats">${spellStats(sp).map(([k, v]) => `<span><em>${k}</em> ${v}</span>`).join('')}</div>`
+  // Always four stat tiles, so every card has the same size.
+  const stats = spellStats(sp).map(([k, v]) => `<span>${v}<em>${k}</em></span>`);
+  while (stats.length < 4) stats.push('<span class="empty"></span>');
+  const html = `<div class="sc-head">${categoryIcon(p.category, 'big')}<div>`
+    + `<div class="sc-title"><strong>${sp.name}</strong> <span class="muted">· ${p.category} spell · <kbd>E</kbd></span></div>`
+    + `<div class="sc-text">${sp.text.replace(/(\d) s\b/g, '$1&nbsp;s')}</div></div></div>`
+    + `<div class="sc-stats">${stats.join('')}</div>`
     + `<div class="sc-roles"><div><h3>As a hider</h3><p>${sp.hider}</p></div><div><h3>As a seeker</h3><p>${sp.seeker}</p></div></div>`;
   if ($('spell-card').innerHTML !== html) $('spell-card').innerHTML = html;
 }
