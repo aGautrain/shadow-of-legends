@@ -112,9 +112,9 @@ where the fog hides people.
    (Blue or Red), picks a champion (required before Ready), and clicks Ready. Every
    champion of the live game is offered (list, portraits and splash art come
    from Riot's Data Dragon CDN at runtime, so new champions appear on their
-   own); a champion can be taken by one player only. The champion is
-   cosmetic: its portrait is your token on the map and its splash art is your
-   background. When every player is ready and both teams
+   own); a champion can be taken by one player only. Its portrait is your
+   token on the map and its splash art is your background. With **Fantasy**
+   on (see below), it also sets your spell. When every player is ready and both teams
    have at least one player, a 3 s countdown starts the game. Unreadying or a
    team going empty cancels it. The room creator (the host) can change the
    round settings while everyone is in the lobby.
@@ -128,6 +128,22 @@ where the fog hides people.
      Stealth Wards per seeker (default 2) and per hider (default 0, up to 5
      each). Hiders can ward from the hide phase on, seekers once released. A
      hider's ward only gives the hiders vision; it never spots anyone.
+   - **Fantasy** (host checkbox, on by default): each champion's category is
+     its first Data Dragon tag, and gives one active spell on E. Everyone can
+     cast once released (hiders from the hide phase, seekers from the seek
+     phase), never once caught; cooldowns reset each round.
+
+     | Category | Spell | Effect | Cooldown |
+     | --- | --- | --- | --- |
+     | Mage | Blink | Teleport up to 450 toward the cursor, over thin walls | 30 s |
+     | Assassin | Shroud | Invisible to the enemy team for 3 s: a hider's spotted meter cannot fill; a seeker still sees and catches | 45 s |
+     | Fighter | Surge | +40% move speed for 3 s | 25 s |
+     | Tank | Earthshaker | Roots every enemy within 1000 for 1.5 s | 40 s |
+     | Marksman | Flare | Reveals a 500 radius up to 3000 away for 4 s; a seeker's Flare catches like a ward | 45 s |
+     | Support | Sweep | Destroys enemy wards within 900, +1 ward per ward destroyed (no cap) | 40 s |
+
+     Earthshaker and Flare areas are drawn for both teams, in the caster's
+     team color, lightened.
 3. **Catching.** A hider is caught after being **in the seeking team's vision
    for 2 s in a row** (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
    sight). Same vision rules as section 2: brush hides you unless a seeker or

@@ -80,6 +80,7 @@
         <label class="row">Wards per seeker <select id="set-seeker-wards"></select></label>
         <label class="row">Wards per hider <select id="set-hider-wards"></select></label>
         <label class="check"><input type="checkbox" id="set-training"> Training: hiders see the seekers' vision in red</label>
+        <label class="check"><input type="checkbox" id="set-fantasy"> Fantasy: each champion gets a spell from its class (E)</label>
       </fieldset>
 
       <p id="lobby-status" class="status-line" role="status"></p>
@@ -91,6 +92,7 @@
           <li><strong>Hide phase:</strong> hiders leave their fountain and find a spot. Seekers wait in theirs.</li>
           <li><strong>Seek phase:</strong> a hider who stays in the seeking team's vision for <span id="rule-catch"></span> s in a row is caught. Brush hides you unless a seeker or ward is in that same brush, and walls block sight.</li>
           <li><span id="rule-wards"></span> Press <kbd>W</kbd> to place a Stealth Ward at the cursor. A seeker's ward helps catch hiders; a hider's ward only shows the hiders where the seekers are.</li>
+          <li id="rule-fantasy"></li>
           <li>The team that catches the larger share of hiders wins; on a tie, the faster team.</li>
           <li><kbd>Right-click</kbd> move · <kbd>Drag</kbd> pan · <kbd>Wheel</kbd> zoom · <kbd>Y</kbd> lock camera · <kbd>Space</kbd> center · On touch: tap to move.</li>
         </ul>
@@ -105,6 +107,7 @@
     <div id="meter" class="meter" hidden><div class="fill"></div><span></span></div>
     <aside id="board" class="board"></aside>
     <div class="buttons">
+      <button id="spell-btn" hidden title="Cast your champion's spell (E)">Spell (E)</button>
       <button id="ward-btn" hidden title="Place a Stealth Ward at the cursor (W)">Ward (W)</button>
       <button id="follow-btn" title="Lock the camera on your champion (Y)">Camera lock</button>
     </div>

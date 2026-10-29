@@ -16,7 +16,10 @@ The landing page lists the modes. The sim below is the **Pedagogic** mode
 **Hide and seek** (`hide-and-seek/`) is the multiplayer mode: create a room,
 share the invite link, pick a name and a team (Blue or Red) in the lobby, and
 the game starts when everyone is ready. Two rounds, so each team hides once
-and seeks once; a hider is caught after 2 s in the seekers' vision. It runs
+and seeks once; a hider is caught after 2 s in the seekers' vision. With
+the host's **Fantasy** option (on by default), each champion also gets a
+spell from its class (Mage Blink, Assassin Shroud, Fighter Surge, Tank
+Earthshaker, Marksman Flare, Support Sweep) on E. It runs
 peer to peer over WebRTC (PeerJS), with the room creator's browser as the
 server, so it needs no backend. See [PLAN.md](PLAN.md#6-hide-and-seek-mode-multiplayer).
 
@@ -47,7 +50,7 @@ npm test   # Node 22+, no dependencies
 Logic tests per mode, on small hand-drawn grids and the real map data:
 `test/pedagogic/` (vision, brush, walls, gates, paths, vision sources) and
 `test/hide-and-seek/` (lobby, champion picks, rounds and role swap, catching,
-wards, scoring). The hide and seek room runs on a fake clock.
+wards, Fantasy spells, scoring). The hide and seek room runs on a fake clock.
 
 ## Refresh the map data
 

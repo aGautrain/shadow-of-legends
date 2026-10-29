@@ -10,6 +10,7 @@ import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, 
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl } from './champions.js';
+import { SPELLS, categoryOf, clampRange, blinkTarget } from './spells.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('map');
@@ -76,6 +77,7 @@ async function createRoom() {
       if (id === HOST_ID) { const copy = structuredClone(msg); queueMicrotask(() => onMessage(copy)); }
       else if (transport) transport.send(id, msg);
     });
+    srv.categories = categories;
     try {
       transport = await openHost(code, {
         onJoin: (id) => srv.join(id),
@@ -140,6 +142,7 @@ function onMessage(m) {
   else if (m.t === 'phase') onPhase(m);
   else if (m.t === 'snap') onSnap(m);
   else if (m.t === 'caught') onCaught(m);
+  else if (m.t === 'spell') onSpell(m);
 }
 
 // ---------------------------------------------------------------- home
@@ -175,7 +178,8 @@ for (const s of CATCH_CHOICES) $('set-catch').add(new Option(`${s} s`, s));
 // The host's catch delay once known, else the default.
 const catchTime = () => (game.settings || (room && room.settings) || RULES).catchTime;
 for (const id of ['set-seeker-wards', 'set-hider-wards']) for (const n of WARD_CHOICES) $(id).add(new Option(String(n), n));
-const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-training'];
+const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-training', 'set-fantasy'];
+const spellOf = (p) => (p && p.category ? SPELLS[p.category] : null);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function renderLobby() {
@@ -210,6 +214,10 @@ function renderLobby() {
   $('set-seeker-wards').value = s.seekerWards;
   $('set-hider-wards').value = s.hiderWards;
   $('set-training').checked = s.training;
+  $('set-fantasy').checked = s.fantasy;
+  $('rule-fantasy').hidden = !s.fantasy;
+  $('rule-fantasy').innerHTML = '<strong>Fantasy:</strong> press <kbd>E</kbd> to cast your champion\'s spell, set by its class. '
+    + Object.entries(SPELLS).map(([c, sp]) => `${c}, <em>${sp.name}</em>: ${sp.text[0].toLowerCase()}${sp.text.slice(1, -1)} (${sp.cooldown} s)`).join(' · ') + '.';
   for (const id of SETTING_INPUTS) $(id).disabled = !isHost();
   $('rule-wards').textContent = `Seekers get ${plural(s.seekerWards, 'Stealth Ward')} each, hiders ${s.hiderWards}.`;
   $('settings-note').textContent = isHost() ? '(you are the host)' : '(set by the host)';
@@ -237,8 +245,9 @@ function lobbyStatus() {
 }
 // ---------------------------------------------------------------- champions
 
-let champions = []; // [{ id, name, icon }] once Data Dragon answers
+let champions = []; // [{ id, name, icon, tags }] once Data Dragon answers
 const champById = new Map();
+const categories = new Map(); // champion id -> Fantasy category, read by the host's server
 const iconImages = new Map(); // id -> Image, for drawing on the map
 
 function avatar(p) {
@@ -264,7 +273,8 @@ function setSplash(id) {
 
 loadChampions().then((list) => {
   champions = list;
-  for (const c of list) champById.set(c.id, c);
+  for (const c of list) { champById.set(c.id, c); const cat = categoryOf(c.tags); if (cat) categories.set(c.id, cat); }
+  if (server) server.broadcastRoom();
   $('champ-grid').innerHTML = list.length
     ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48"><span>${escapeHtml(c.name)}</span></button>`).join('')
     : '<p class="empty">Could not load the champion list from Riot\'s servers. Reload the page to try again: a champion is needed to be ready.</p>';
@@ -282,7 +292,9 @@ function renderChampions() {
     b.disabled = !!by;
     b.title = by ? `${name} (picked by ${by})` : name;
   }
-  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one to be ready';
+  const sp = room && room.settings.fantasy && spellOf(playerById(myId));
+  $('champ-note').textContent = mine && champById.has(mine)
+    ? `· ${champById.get(mine).name}${sp ? ` · ${playerById(myId).category}, spell: ${sp.name}` : ''}` : '· pick one to be ready';
 }
 
 function filterChampions() {
@@ -316,7 +328,7 @@ $('lobby-name').addEventListener('input', () => {
 const sendSettings = () => send({
   t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked,
   catchTime: Number($('set-catch').value),
-  seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value),
+  seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value), fantasy: $('set-fantasy').checked,
 });
 for (const id of SETTING_INPUTS) $(id).addEventListener('change', sendSettings);
 $('copy-link').addEventListener('click', async () => {
@@ -329,9 +341,12 @@ $('copy-link').addEventListener('click', async () => {
 // ---------------------------------------------------------------- game state
 
 const game = { phase: 'lobby', round: 0, seekTeam: null, endsAt: 0, results: [], winner: null, settings: null };
-const me = { x: 0, z: 0, caught: false, spot: 0, wards: 0 };
-const others = new Map(); // id -> { x, z, tx, tz, caught, spot }
+const me = { x: 0, z: 0, caught: false, spot: 0, wards: 0, flags: 0, cd: 0, surgeUntil: 0, rootUntil: 0 };
+const others = new Map(); // id -> { x, z, tx, tz, caught, spot, flags }
 let wards = []; // [{ owner, x, z }]
+let flares = []; // [{ owner, x, z }], Marksman reveals
+let effects = []; // [{ x, z, radius, team, start, until }], spell areas drawn for a moment
+const SHROUDED = 1, ROOTED = 2;
 let path = [];
 
 const isSeeker = () => myTeam() === game.seekTeam;
@@ -340,6 +355,8 @@ const spectating = () => !playing() || me.caught;
 // Hiders may ward from the hide phase on; seekers once they are released.
 const wardPhase = () => game.phase === 'seek' || (game.phase === 'hide' && !isSeeker());
 const canMove = () => !me.caught && (game.phase === 'seek' || (game.phase === 'hide' && !isSeeker()));
+const rooted = () => !!(me.flags & ROOTED) || performance.now() < me.rootUntil;
+const mySpell = () => (game.settings && game.settings.fantasy ? spellOf(playerById(myId)) : null);
 
 function onPhase(m) {
   const prev = game.phase;
@@ -353,10 +370,12 @@ function onPhase(m) {
     const s = m.spawns[myId];
     if (s) { me.x = s.x; me.z = s.z; }
     me.caught = false; me.spot = 0; path = [];
+    me.flags = 0; me.cd = 0; me.surgeUntil = 0; me.rootUntil = 0;
+    flares = []; effects = [];
     me.wards = game.settings ? (isSeeker() ? game.settings.seekerWards : game.settings.hiderWards) : 0;
     others.clear();
     for (const [id, p] of Object.entries(m.spawns)) {
-      if (id !== myId) others.set(id, { x: p.x, z: p.z, tx: p.x, tz: p.z, caught: false, spot: 0 });
+      if (id !== myId) others.set(id, { x: p.x, z: p.z, tx: p.x, tz: p.z, caught: false, spot: 0, flags: 0 });
     }
     wards = [];
     camera.follow = true;
@@ -379,19 +398,21 @@ function onSnap(m) {
   const end = performance.now() + m.ms;
   if (Math.abs(end - game.endsAt) > 300) game.endsAt = end;
   const seen = new Set();
-  for (const [id, x, z, caught, spot, wardsLeft] of m.p) {
+  for (const [id, x, z, caught, spot, wardsLeft, flags = 0, cd = 0] of m.p) {
     if (id === myId) {
       if (caught && !me.caught) path = [];
-      me.caught = !!caught; me.spot = spot; me.wards = wardsLeft;
+      me.caught = !!caught; me.spot = spot; me.wards = wardsLeft; me.flags = flags; me.cd = cd;
       continue;
     }
     seen.add(id);
     const o = others.get(id);
-    if (o) { o.tx = x; o.tz = z; o.caught = !!caught; o.spot = spot; }
-    else others.set(id, { x, z, tx: x, tz: z, caught: !!caught, spot });
+    if (o) { o.tx = x; o.tz = z; o.caught = !!caught; o.spot = spot; o.flags = flags; }
+    else others.set(id, { x, z, tx: x, tz: z, caught: !!caught, spot, flags });
   }
   for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
   wards = m.w.map(([owner, x, z]) => ({ owner, x, z }));
+  flares = (m.f || []).map(([owner, x, z]) => ({ owner, x, z }));
+  needsDraw = true;
   renderBoard();
   syncButtons();
 }
@@ -405,6 +426,29 @@ function onCaught(m) {
   const o = others.get(m.id);
   if (o) o.caught = true;
   renderBoard();
+}
+
+function onSpell(m) {
+  const who = playerById(m.id);
+  const now = performance.now();
+  const mine = m.id === myId;
+  if (m.category === 'Mage') {
+    const o = others.get(m.id);
+    // Snap, do not glide: it is a teleport.
+    if (o) { o.x = o.tx = m.x; o.z = o.tz = m.z; }
+  } else if (m.category === 'Fighter' && mine) {
+    me.surgeUntil = now + m.ms;
+  } else if (m.category === 'Tank') {
+    effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 1200 });
+    if (m.hit.includes(myId)) { me.rootUntil = now + m.ms; path = []; feed(`Rooted by ${who ? escapeHtml(who.name) : 'a Tank'}!`); }
+    else if (mine) feed(m.hit.length ? `Earthshaker rooted ${m.hit.length} ${m.hit.length === 1 ? 'enemy' : 'enemies'}.` : 'Earthshaker hit nobody.');
+  } else if (m.category === 'Marksman') {
+    effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 600 });
+  } else if (m.category === 'Support' && (mine || m.team === myTeam())) {
+    effects.push({ x: m.x, z: m.z, radius: m.radius, team: m.team, start: now, until: now + 800 });
+    if (mine) feed(m.swept ? `Sweep destroyed ${plural(m.swept, 'ward')}: +${m.swept} for you.` : 'Sweep found no enemy ward.');
+  }
+  needsDraw = true;
 }
 
 function feed(html) {
@@ -427,6 +471,7 @@ function teamSources(team) {
     if (p && p.team === team && !o.caught) list.push({ x: o.x, z: o.z, sight: SIGHT.champion });
   }
   for (const w of wards) { const p = playerById(w.owner); if (p && p.team === team) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth }); }
+  for (const f of flares) { const p = playerById(f.owner); if (p && p.team === team) list.push({ x: f.x, z: f.z, sight: SPELLS.Marksman.radius }); }
   return list;
 }
 const bitsOf = (list) => vision.merge(list.map((s) => vision.source(s.x, s.z, s.sight)));
@@ -500,6 +545,7 @@ function clampCamera() {
 // ---------------------------------------------------------------- draw
 
 const COLORS = { blue: '#4aa8ff', red: '#ff4d5a', me: '#ffd34d', ward: '#ffd84a' };
+const LIGHT = { blue: 'rgba(160,210,255,', red: 'rgba(255,170,180,' }; // spell areas, alpha appended
 
 function draw() {
   clampCamera();
@@ -528,6 +574,21 @@ function draw() {
     ctx.fill(); ctx.stroke();
   }
 
+  // Tank and Marksman areas, seen by both teams in their caster's light team color
+  const now = performance.now();
+  effects = effects.filter((e) => now < e.until);
+  const areas = effects.map((e) => ({ ...e, a: 1 - (now - e.start) / (e.until - e.start) }));
+  for (const f of flares) { const p = playerById(f.owner); if (p) areas.push({ x: f.x, z: f.z, radius: SPELLS.Marksman.radius, team: p.team, a: 0.8 }); }
+  for (const e of areas) {
+    const [x, y] = toScreen(e.x, e.z);
+    const r = e.radius * camera.scale;
+    ctx.globalAlpha = Math.max(0, e.a);
+    ctx.fillStyle = LIGHT[e.team] + '0.16)'; ctx.strokeStyle = LIGHT[e.team] + '0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  if (effects.length) needsDraw = true;
+
   // path
   if (path.length) {
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
@@ -540,7 +601,7 @@ function draw() {
   for (const [id, o] of others) {
     const p = playerById(id);
     if (!p) continue;
-    if (!o.caught && p.team !== team && !visible(o.x, o.z)) continue;
+    if (!o.caught && p.team !== team && (!visible(o.x, o.z) || ((o.flags & SHROUDED) && !spectating()))) continue;
     drawChampion(o.x, o.z, p, o, false);
   }
   const mine = playerById(myId);
@@ -550,7 +611,7 @@ function draw() {
 function drawChampion(x0, z0, p, s, isMe) {
   const [x, y] = toScreen(x0, z0);
   const r = Math.max(8, 65 * camera.scale);
-  ctx.globalAlpha = s.caught ? 0.45 : 1;
+  ctx.globalAlpha = s.caught || (s.flags & SHROUDED) ? 0.45 : 1;
   const icon = iconImage(p.champion);
   if (icon) {
     // Champion portrait in a team-colored ring; yours gets a gold outer ring.
@@ -565,6 +626,10 @@ function drawChampion(x0, z0, p, s, isMe) {
     ctx.fillStyle = isMe ? COLORS.me : COLORS[p.team];
     ctx.strokeStyle = isMe ? COLORS[p.team] : '#0b0f14'; ctx.lineWidth = isMe ? 3 : 2;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  if ((s.flags & ROOTED) || (isMe && rooted())) {
+    ctx.strokeStyle = '#b48a4a'; ctx.lineWidth = 3; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.arc(x, y, r + 11, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   }
   if (s.caught) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
@@ -639,6 +704,13 @@ function syncButtons() {
   $('ward-btn').hidden = !(playing() && allowance > 0);
   $('ward-btn').disabled = !canWard;
   $('ward-btn').textContent = `Ward (W) · ${me.wards}`;
+  const sp = mySpell();
+  $('spell-btn').hidden = !(playing() && sp);
+  if (sp) {
+    $('spell-btn').disabled = !canCast();
+    $('spell-btn').textContent = me.cd > 0 ? `${sp.name} (E) · ${Math.ceil(me.cd)} s` : `${sp.name} (E)`;
+    $('spell-btn').title = `${playerById(myId).category}: ${sp.text} Cooldown ${sp.cooldown} s.`;
+  }
   $('follow-btn').classList.toggle('on', camera.follow);
 }
 
@@ -708,14 +780,38 @@ function placeWard(target) {
   send({ t: 'ward', x, z });
 }
 
+// Hiders cast from the hide phase on, seekers once released; never once caught.
+const canCast = () => !!mySpell() && wardPhase() && !me.caught && me.cd <= 0;
+
+function castSpell(target) {
+  const sp = mySpell();
+  if (!canCast()) return;
+  const category = playerById(myId).category;
+  const t = target || me;
+  if (category === 'Mage') {
+    if (rooted()) return;
+    const land = blinkTarget(grid, myTeam(), me, t.x, t.z);
+    // Move first: the next position we report must be the landing spot.
+    me.x = land.x; me.z = land.z; path = [];
+    send({ t: 'cast', x: land.x, z: land.z });
+  } else if (category === 'Marksman') {
+    send({ t: 'cast', ...clampRange(me.x, me.z, t.x, t.z, sp.range) });
+  } else {
+    send({ t: 'cast' });
+  }
+  me.cd = sp.cooldown; // until the next snapshot says otherwise
+  syncButtons();
+  needsDraw = true;
+}
+
 let last = performance.now();
 let lastSend = 0, lastSentPos = '';
 let lastUi = 0;
 function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (path.length && canMove()) {
-    let budget = DEFAULT_MOVE_SPEED * dt;
+  if (path.length && canMove() && !rooted()) {
+    let budget = DEFAULT_MOVE_SPEED * (now < me.surgeUntil ? SPELLS.Fighter.speed : 1) * dt;
     while (budget > 0 && path.length) {
       const p = path[0];
       const d = Math.hypot(p.x - me.x, p.z - me.z);
@@ -837,8 +933,10 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'y' || e.key === 'Y') { camera.follow = !camera.follow; syncButtons(); needsDraw = true; }
   else if (e.key === 's' || e.key === 'S') { path = []; needsDraw = true; }
   else if (e.key === 'w' || e.key === 'W') placeWard(cursor);
+  else if (e.key === 'e' || e.key === 'E') castSpell(cursor);
 });
 $('ward-btn').addEventListener('click', () => placeWard(null));
+$('spell-btn').addEventListener('click', () => castSpell(cursor));
 $('follow-btn').addEventListener('click', () => { camera.follow = !camera.follow; syncButtons(); needsDraw = true; });
 window.addEventListener('resize', resize);
 

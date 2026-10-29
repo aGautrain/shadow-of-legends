@@ -6,14 +6,14 @@ const CDN = 'https://ddragon.leagueoflegends.com';
 
 let list = null;
 
-// Resolves to [{ id, name }] sorted by name, or [] if Data Dragon is unreachable.
+// Resolves to [{ id, name, icon, tags }] sorted by name, or [] if Data Dragon is unreachable.
 export function loadChampions() {
   list ||= (async () => {
     const versions = await (await fetch(`${CDN}/api/versions.json`)).json();
     const version = versions[0];
     const data = (await (await fetch(`${CDN}/cdn/${version}/data/en_US/champion.json`)).json()).data;
     return Object.values(data)
-      .map((c) => ({ id: c.id, name: c.name, icon: `${CDN}/cdn/${version}/img/champion/${c.image.full}` }))
+      .map((c) => ({ id: c.id, name: c.name, icon: `${CDN}/cdn/${version}/img/champion/${c.image.full}`, tags: c.tags || [] }))
       .sort((a, b) => a.name.localeCompare(b.name));
   })().catch((e) => { console.warn('Champion list unavailable', e); return []; });
   return list;
