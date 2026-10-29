@@ -115,17 +115,18 @@ where the fog hides people.
    own); a champion can be taken by one player only. Its portrait is your
    token on the map and its splash art is your background. With **Fantasy**
    on (see below), it also sets your spell. When every player is ready and both teams
-   have at least one player, a 3 s countdown starts the game. Unreadying or a
+   have at least one player, a 2 s countdown starts the game. Unreadying or a
    team going empty cancels it. The room creator (the host) can change the
    round settings while everyone is in the lobby.
 2. **Two rounds**, so that every player hides once and seeks once.
    Round 1: Blue seeks, Red hides. Round 2: Red seeks, Blue hides.
    Each round has two phases:
-   - **Hide** (40 s by default): hiders leave their fountain and look for a
-     spot. Seekers are held in their own fountain.
-   - **Seek** (3 min by default): seekers hunt.
+   - **Hide** (30 s by default): hiders leave their fountain at 500 move
+     speed and look for a spot. Seekers are held in their own fountain.
+   - **Seek** (2 min by default): seekers hunt; everyone moves at 425,
+     faster than the game's 345, to keep chases tense.
    - **Wards** (W, at the cursor, 600 range like the trinket): the host sets
-     Stealth Wards per seeker (default 2) and per hider (default 0, up to 5
+     Stealth Wards per seeker (default 3) and per hider (default 1, up to 5
      each). Hiders can ward from the hide phase on, seekers once released. A
      hider's ward only gives the hiders vision; it never spots anyone.
    - **Fantasy** (host checkbox, on by default): each champion's category is
@@ -135,20 +136,20 @@ where the fog hides people.
 
      | Category | Spell | Effect | Cooldown |
      | --- | --- | --- | --- |
-     | Mage | Blink | Teleport up to 450 toward the cursor, over thin walls | 30 s |
-     | Assassin | Shroud | Invisible to the enemy team for 3 s: a hider's spotted meter cannot fill; a seeker still sees and catches | 45 s |
-     | Fighter | Surge | +40% move speed for 3 s | 25 s |
-     | Tank | Earthshaker | Roots every enemy within 1000 for 1.5 s | 40 s |
-     | Marksman | Flare | Reveals a 500 radius up to 3000 away for 4 s; a seeker's Flare catches like a ward | 45 s |
-     | Support | Sweep | Destroys enemy wards within 900, +1 ward per ward destroyed (no cap) | 40 s |
+     | Mage | Blink | Teleport up to 450 toward the cursor, over thin walls | 20 s |
+     | Assassin | Shroud | Invisible to the enemy team for 3 s: a hider's spotted meter cannot fill; a seeker still sees and catches | 30 s |
+     | Fighter | Surge | +40% move speed for 3 s | 18 s |
+     | Tank | Earthshaker | Roots every enemy within 1000 for 1.5 s | 30 s |
+     | Marksman | Flare | Reveals a 500 radius up to 3000 away for 3 s; a seeker's Flare catches like a ward | 30 s |
+     | Support | Sweep | Destroys enemy wards within 900, +1 ward per ward destroyed (no cap) | 30 s |
 
      Earthshaker and Flare areas are drawn for both teams, in the caster's
      team color, lightened.
 3. **Catching.** A hider is caught after being **in the seeking team's vision
-   for 2 s in a row** (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
+   for 1.5 s in a row** (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
    sight). Same vision rules as section 2: brush hides you unless a seeker or
    ward is in that brush, walls block sight. There is no tagging by contact:
-   both teams move at 345, so a chase would never end, and the point of the
+   both teams move at the same speed, so a chase would never end, and the point of the
    game is vision. The hider sees their own "Spotted" meter fill; seekers see
    it above the hider. Caught hiders become spectators for the rest of the
    round and see the whole map with the seekers' vision drawn in red.

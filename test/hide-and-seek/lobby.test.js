@@ -139,15 +139,16 @@ test('only the host changes settings, and only to listed values', () => {
   const room = makeRoom();
   room.join(HOST_ID); room.join('p1');
   room.send('p1', { t: 'settings', hide: 20 });
-  assert.equal(room.server.settings.hide, RULES.hide);
-  assert.equal(room.server.settings.seekerWards, 2, 'seekers get 2 wards by default');
-  assert.equal(room.server.settings.hiderWards, 0, 'hiders get none by default');
-  assert.equal(room.server.settings.catchTime, 2, 'caught after 2 s by default');
+  assert.equal(room.server.settings.hide, 30, 'hide 30 s by default');
+  assert.equal(room.server.settings.seek, 120, 'seek 2 min by default');
+  assert.equal(room.server.settings.seekerWards, 3, 'seekers get 3 wards by default');
+  assert.equal(room.server.settings.hiderWards, 1, 'hiders get 1 ward by default');
+  assert.equal(room.server.settings.catchTime, 1.5, 'caught after 1.5 s by default');
   assert.equal(room.server.settings.fantasy, true, 'Fantasy is on by default');
-  room.send(HOST_ID, { t: 'settings', hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1, catchTime: 3, fantasy: false });
-  const set = { hide: 20, seek: 300, training: true, seekerWards: 4, hiderWards: 1, catchTime: 3, fantasy: false };
+  room.send(HOST_ID, { t: 'settings', hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, fantasy: false });
+  const set = { hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, fantasy: false };
   assert.deepEqual(room.server.settings, set);
-  room.send(HOST_ID, { t: 'settings', hide: 25, seek: 1, training: 'yes', seekerWards: 9, hiderWards: -1, catchTime: 0, fantasy: 'no' });
+  room.send(HOST_ID, { t: 'settings', hide: 40, seek: 300, training: 'yes', seekerWards: 9, hiderWards: -1, catchTime: 0, fantasy: 'no' });
   assert.deepEqual(room.server.settings, set);
   room.send('p1', { t: 'settings', seekerWards: 0, hiderWards: 3, catchTime: 1 });
   assert.deepEqual(room.server.settings, set);
@@ -167,12 +168,12 @@ test('the game needs two players, both teams and everyone ready', () => {
   assert.equal(room.server.canStart(), true);
 });
 
-test('everyone ready starts a 3 s countdown, then round 1', () => {
+test('everyone ready starts a 2 s countdown, then round 1', () => {
   const room = makeRoom();
   room.join(HOST_ID, 'Host', 'blue'); room.join('p1', 'p1', 'red');
   room.ready(HOST_ID, 'p1');
-  assert.equal(room.last('p1', 'room').countdown, RULES.countdown * 1000);
-  room.advance(2.9);
+  assert.equal(room.last('p1', 'room').countdown, 2000);
+  room.advance(1.9);
   assert.equal(room.server.phase, 'lobby');
   room.advance(0.2);
   assert.equal(room.server.phase, 'hide');
@@ -204,7 +205,7 @@ test('nobody can join once the game started', () => {
   const room = makeRoom();
   room.join('a', 'a', 'blue'); room.join('b', 'b', 'red');
   room.ready('a', 'b');
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   room.join('late');
   assert.equal(room.player('late'), undefined);
   assert.match(room.last('late', 'reject').reason, /in progress/);
@@ -214,7 +215,7 @@ test('lobby changes are refused once the game started', () => {
   const room = makeRoom();
   room.join(HOST_ID, 'Host', 'blue'); room.join('b', 'b', 'red');
   room.ready(HOST_ID, 'b');
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   room.send('b', { t: 'set', team: 'blue', champion: 'Ahri' });
   room.send(HOST_ID, { t: 'settings', hide: 20 });
   assert.equal(room.player('b').team, 'red');

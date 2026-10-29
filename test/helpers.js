@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { NavGrid, FLAG } from '../src/grid.js';
 import { Vision } from '../src/vision.js';
 import { Server, HOST_ID } from '../src/hideseek/server.js';
+import { RULES } from '../src/hideseek/rules.js';
 
 export const CELL = 50;
 
@@ -121,14 +122,20 @@ export function makeRoom(grid = hideSeekGrid()) {
   return room;
 }
 
+// Fixed numbers the game scenarios are written against, sent by the host
+// before starting, so tuning the defaults in rules.js doesn't rewrite every
+// scenario. The defaults themselves have their own tests.
+export const SCENARIO = { catchTime: 2, seekerWards: 2, hiderWards: 0 };
+
 // A lobby with the host on Blue and the given players, everyone ready, then
 // run through the countdown so round 1's hide phase has begun.
 export function startedRoom(players = [['p1', 'red']], grid) {
   const room = makeRoom(grid);
   room.join(HOST_ID, 'Host', 'blue');
   for (const [id, team] of players) room.join(id, id, team);
+  room.send(HOST_ID, { t: 'settings', ...SCENARIO });
   room.ready(HOST_ID, ...players.map(([id]) => id));
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   return room;
 }
 

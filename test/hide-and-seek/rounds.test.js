@@ -3,17 +3,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES, FOUNTAIN, seekerOf, otherTeam, moveSpeed } from '../../src/hideseek/rules.js';
-import { startedRoom, makeRoom, hideSeekGrid, HOST_ID, at } from '../helpers.js';
+import { startedRoom, makeRoom, SCENARIO, hideSeekGrid, HOST_ID, at } from '../helpers.js';
 
 const HIDE = RULES.hide, SEEK = RULES.seek;
 
 // From the start of round 1's hide phase to its seek phase.
 function toSeek(room) { room.advance(HIDE + 0.1); }
 
-test('players move at 500 during the hide phase and 345 otherwise', () => {
+test('players move at 500 during the hide phase and 425 otherwise', () => {
   assert.equal(moveSpeed('hide'), 500);
-  assert.equal(moveSpeed('seek'), 345);
-  assert.equal(moveSpeed('lobby'), 345);
+  assert.equal(moveSpeed('seek'), 425);
+  assert.equal(moveSpeed('lobby'), 425);
+});
+
+test('the break between rounds lasts 5 s', () => {
+  assert.equal(RULES.roundBreak, 5);
 });
 
 test('Blue seeks in round 1 and Red in round 2', () => {
@@ -39,10 +43,14 @@ test('round 1 starts in the hide phase with everyone at their fountain', () => {
   assert.notDeepEqual([r1.x, r1.z], [r2.x, r2.z], 'teammates are spread out');
 });
 
-test('by default seekers get 2 wards and hiders none', () => {
-  const room = startedRoom([['r1', 'red']]);
-  assert.equal(room.player(HOST_ID).wards, 2);
-  assert.equal(room.player('r1').wards, 0);
+test('by default seekers get 3 wards and hiders 1', () => {
+  const room = makeRoom();
+  room.join(HOST_ID, 'Host', 'blue');
+  room.join('r1', 'r1', 'red');
+  room.ready(HOST_ID, 'r1');
+  room.advance(RULES.countdown + 0.1);
+  assert.equal(room.player(HOST_ID).wards, 3);
+  assert.equal(room.player('r1').wards, 1);
 });
 
 // A started room after the host picked ward counts in the lobby.
@@ -50,9 +58,9 @@ function wardRoom(seekerWards, hiderWards, players = [['r1', 'red']]) {
   const room = makeRoom();
   room.join(HOST_ID, 'Host', 'blue');
   for (const [id, team] of players) room.join(id, id, team);
-  room.send(HOST_ID, { t: 'settings', seekerWards, hiderWards });
+  room.send(HOST_ID, { t: 'settings', ...SCENARIO, seekerWards, hiderWards });
   room.ready(HOST_ID, ...players.map(([id]) => id));
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   return room;
 }
 
@@ -116,7 +124,7 @@ test('the host\'s catch delay replaces the 2 s default', () => {
     room.join('r1', 'r1', 'red');
     room.send(HOST_ID, { t: 'settings', catchTime });
     room.ready(HOST_ID, 'r1');
-    room.advance(3.1);
+    room.advance(RULES.countdown + 0.1);
     room.move('r1', 5000, 5000);
     toSeek(room);
     room.move(HOST_ID, 5000, 5600);
@@ -213,7 +221,7 @@ test('seekers can place up to two wards in range during the seek phase', () => {
   assert.equal(host.wards, 0);
 });
 
-test('with the default settings hiders cannot place wards', () => {
+test('hiders with no wards cannot place any', () => {
   const room = startedRoom([['r1', 'red']]);
   toSeek(room);
   room.move('r1', 5000, 5000);

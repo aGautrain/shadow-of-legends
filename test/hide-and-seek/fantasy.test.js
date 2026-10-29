@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { RULES } from '../../src/hideseek/rules.js';
 import { SPELLS, categoryOf, blinkTarget, spellStats } from '../../src/hideseek/spells.js';
 import { LANGS, STRINGS } from '../../src/i18n.js';
-import { makeRoom, openGrid, at, HOST_ID } from '../helpers.js';
+import { makeRoom, openGrid, at, HOST_ID, SCENARIO } from '../helpers.js';
 
 const HIDE = RULES.hide;
 
@@ -17,9 +17,9 @@ function fantasyRoom(players, settings = {}) {
     room.join(id, id, team);
     if (category) room.server.categories.set('Champ' + id, category);
   }
-  if (Object.keys(settings).length) room.send(HOST_ID, { t: 'settings', ...settings });
+  room.send(HOST_ID, { t: 'settings', ...SCENARIO, ...settings });
   room.ready(...players.map(([id]) => id));
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   return room;
 }
 const toSeek = (room) => room.advance(HIDE + 0.1);
@@ -37,13 +37,13 @@ test('the category is the first Data Dragon tag, if it is one of the six', () =>
 });
 
 test('the spells have the agreed numbers', () => {
-  assert.equal(SPELLS.Mage.range, 450); assert.equal(SPELLS.Mage.cooldown, 30);
-  assert.equal(SPELLS.Assassin.duration, 3); assert.equal(SPELLS.Assassin.cooldown, 45);
-  assert.equal(SPELLS.Fighter.speed, 1.4); assert.equal(SPELLS.Fighter.duration, 3); assert.equal(SPELLS.Fighter.cooldown, 25);
-  assert.equal(SPELLS.Tank.radius, 1000); assert.equal(SPELLS.Tank.root, 1.5); assert.equal(SPELLS.Tank.cooldown, 40);
-  assert.equal(SPELLS.Marksman.range, 3000); assert.equal(SPELLS.Marksman.radius, 500); assert.equal(SPELLS.Marksman.duration, 4);
-  assert.equal(SPELLS.Marksman.cooldown, 45);
-  assert.equal(SPELLS.Support.radius, 900); assert.equal(SPELLS.Support.cooldown, 40);
+  assert.equal(SPELLS.Mage.range, 450); assert.equal(SPELLS.Mage.cooldown, 20);
+  assert.equal(SPELLS.Assassin.duration, 3); assert.equal(SPELLS.Assassin.cooldown, 30);
+  assert.equal(SPELLS.Fighter.speed, 1.4); assert.equal(SPELLS.Fighter.duration, 3); assert.equal(SPELLS.Fighter.cooldown, 18);
+  assert.equal(SPELLS.Tank.radius, 1000); assert.equal(SPELLS.Tank.root, 1.5); assert.equal(SPELLS.Tank.cooldown, 30);
+  assert.equal(SPELLS.Marksman.range, 3000); assert.equal(SPELLS.Marksman.radius, 500); assert.equal(SPELLS.Marksman.duration, 3);
+  assert.equal(SPELLS.Marksman.cooldown, 30);
+  assert.equal(SPELLS.Support.radius, 900); assert.equal(SPELLS.Support.cooldown, 30);
 });
 
 test('each spell explains itself for hiders and seekers, with its numbers', () => {
@@ -51,9 +51,9 @@ test('each spell explains itself for hiders and seekers, with its numbers', () =
     for (const l of LANGS) for (const field of ['name', 'text', 'hider', 'seeker']) assert.ok(STRINGS[l][`spell.${category}.${field}`], `${l} ${category} ${field}`);
     assert.deepEqual(spellStats(sp)[0], ['Cooldown', `${sp.cooldown} s`]);
   }
-  assert.deepEqual(spellStats(SPELLS.Tank), [['Cooldown', '40 s'], ['Radius', '1000'], ['Root', '1.5 s']]);
-  assert.deepEqual(spellStats(SPELLS.Fighter), [['Cooldown', '25 s'], ['Speed', '+40%'], ['Duration', '3 s']]);
-  assert.deepEqual(spellStats(SPELLS.Marksman), [['Cooldown', '45 s'], ['Range', '3000'], ['Radius', '500'], ['Duration', '4 s']]);
+  assert.deepEqual(spellStats(SPELLS.Tank), [['Cooldown', '30 s'], ['Radius', '1000'], ['Root', '1.5 s']]);
+  assert.deepEqual(spellStats(SPELLS.Fighter), [['Cooldown', '18 s'], ['Speed', '+40%'], ['Duration', '3 s']]);
+  assert.deepEqual(spellStats(SPELLS.Marksman), [['Cooldown', '30 s'], ['Range', '3000'], ['Radius', '500'], ['Duration', '3 s']]);
 });
 
 test('the room message tells each player\'s category', () => {
@@ -105,8 +105,9 @@ test('a spell has a cooldown, shown in the snapshot, and is ready again each rou
   cast(room, 'r1');
   assert.equal(room.all('r1', 'spell').length, 1, 'on cooldown');
   room.advance(1);
-  assert.ok(Math.abs(snapOf(room, 'r1')[7] - 24) < 0.2, 'seconds until ready');
-  room.advance(24.1);
+  const cd = SPELLS.Fighter.cooldown;
+  assert.ok(Math.abs(snapOf(room, 'r1')[7] - (cd - 1)) < 0.2, 'seconds until ready');
+  room.advance(cd - 1 + 0.1);
   cast(room, 'r1');
   assert.equal(room.all('r1', 'spell').length, 2);
   // Round 2: Red seeks, the cooldown is gone.
@@ -138,7 +139,7 @@ test('Mage: Blink cannot land in a wall, and a rooted Mage cannot blink', () => 
   room.server.categories.set('Champhost', 'Tank');
   room.join(HOST_ID, 'Host', 'blue'); room.join('r1', 'r1', 'red');
   room.ready(HOST_ID, 'r1');
-  room.advance(3.1);
+  room.advance(RULES.countdown + 0.1);
   room.move('r1', at(100, 100).x, at(100, 100).z);
   const wall = at(105, 100);
   cast(room, 'r1', wall.x, wall.z);
@@ -197,7 +198,7 @@ test('Fighter: Surge is announced with its duration; the client applies the spee
   const room = fantasyRoom([[HOST_ID, 'blue', null], ['r1', 'red', 'Fighter']]);
   cast(room, 'r1');
   assert.deepEqual(room.last(HOST_ID, 'spell'), { t: 'spell', id: 'r1', category: 'Fighter', team: 'red', ms: 3000 });
-  assert.equal(room.player('r1').readyAt, room.now + 25000);
+  assert.equal(room.player('r1').readyAt, room.now + SPELLS.Fighter.cooldown * 1000);
 });
 
 test('Tank: Earthshaker roots enemies within 1000 for 1.5 s, not allies or farther enemies', () => {
@@ -233,7 +234,7 @@ test('Tank: a hider can root seekers to escape', () => {
   assert.equal(room.player(HOST_ID).z, 5600);
 });
 
-test('Marksman: a seeker\'s Flare sees and catches far away, then fades after 4 s', () => {
+test('Marksman: a seeker\'s Flare sees and catches far away, then fades after 3 s', () => {
   const room = fantasyRoom([[HOST_ID, 'blue', 'Marksman'], ['r1', 'red', null], ['r2', 'red', null]]);
   room.move('r1', 7500, 5000);
   room.move('r2', 9000, 5000);
@@ -242,13 +243,13 @@ test('Marksman: a seeker\'s Flare sees and catches far away, then fades after 4 
   cast(room, HOST_ID, 9000, 5000);
   assert.equal(room.all('r1', 'spell').length, 0, 'beyond 3000');
   cast(room, HOST_ID, 7500, 5000);
-  assert.deepEqual(room.last('r1', 'spell'), { t: 'spell', id: HOST_ID, category: 'Marksman', team: 'blue', x: 7500, z: 5000, radius: 500, ms: 4000 });
+  assert.deepEqual(room.last('r1', 'spell'), { t: 'spell', id: HOST_ID, category: 'Marksman', team: 'blue', x: 7500, z: 5000, radius: 500, ms: 3000 });
   room.advance(0.2);
   assert.deepEqual(room.last('r1', 'snap').f, [[HOST_ID, 7500, 5000]], 'both teams get the area');
   room.advance(2.1);
   assert.equal(room.player('r1').caught, true);
   assert.equal(room.player('r1').caughtBy, HOST_ID);
-  room.advance(1.8);
+  room.advance(0.8);
   assert.deepEqual(room.last('r1', 'snap').f, []);
 });
 
@@ -258,7 +259,7 @@ test('Marksman: a hider\'s Flare only scouts, it never spots', () => {
   room.move('r2', 7000, 5000);
   toSeek(room);
   cast(room, 'r1', 7000, 5000);
-  room.advance(3);
+  room.advance(2.5);
   assert.equal(room.player('r2').spot, 0);
   assert.equal(room.server.flares.length, 1);
 });

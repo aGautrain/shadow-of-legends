@@ -3,12 +3,12 @@
 // texts are in src/i18n.js under spell.<category>.
 
 export const SPELLS = {
-  Mage: { cooldown: 30, range: 450 },
-  Assassin: { cooldown: 45, duration: 3 },
-  Fighter: { cooldown: 25, duration: 3, speed: 1.4 },
-  Tank: { cooldown: 40, radius: 1000, root: 1.5 },
-  Marksman: { cooldown: 45, range: 3000, radius: 500, duration: 4 },
-  Support: { cooldown: 40, radius: 900 },
+  Mage: { cooldown: 20, range: 450 },
+  Assassin: { cooldown: 30, duration: 3 },
+  Fighter: { cooldown: 18, duration: 3, speed: 1.4 },
+  Tank: { cooldown: 30, radius: 1000, root: 1.5 },
+  Marksman: { cooldown: 30, range: 3000, radius: 500, duration: 3 },
+  Support: { cooldown: 30, radius: 900 },
 };
 
 // The numbers shown on a spell's card, as [label, value]. Labels are keys of
