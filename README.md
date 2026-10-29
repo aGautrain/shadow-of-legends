@@ -36,7 +36,18 @@ To try hide and seek offline, open
 browser: they talk over a BroadcastChannel instead of WebRTC.
 
 No build step. Deployed to GitHub Pages by `.github/workflows/pages.yml` on
-every push to `main`.
+every push to `main`, once the tests pass.
+
+## Tests
+
+```sh
+npm test   # Node 22+, no dependencies
+```
+
+Logic tests per mode, on small hand-drawn grids and the real map data:
+`test/pedagogic/` (vision, brush, walls, gates, paths, vision sources) and
+`test/hide-and-seek/` (lobby, champion picks, rounds and role swap, catching,
+wards, scoring). The hide and seek room runs on a fake clock.
 
 ## Refresh the map data
 

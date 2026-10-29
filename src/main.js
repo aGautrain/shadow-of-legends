@@ -2,6 +2,7 @@ import { NavGrid, FLAG } from './grid.js';
 import { Vision, has } from './vision.js';
 import { findPath } from './path.js';
 import { blur } from './blur.js';
+import { teamSources, whoSees } from './sources.js';
 import { SIGHT, UNIT_KINDS, DEFAULT_MOVE_SPEED, DEFAULT_FOG_EDGE, BACKGROUND, TERRAINS, PATCHES, ART_ONLY_TERRAINS } from './config.js';
 
 const canvas = document.getElementById('map');
@@ -120,18 +121,7 @@ function loadHash() {
 
 // ---------------------------------------------------------------- vision
 
-function sources(team) {
-  const list = [];
-  if (team === 'ally') list.push({ name: 'You', x: state.me.x, z: state.me.z, sight: state.sight.champion });
-  state.units.forEach((u) => {
-    if (u.team === team) list.push({ name: (team === 'ally' ? 'Ally ' : 'Enemy ') + UNIT_KINDS[u.kind].label, x: u.x, z: u.z, sight: state.sight[u.kind], unit: u });
-  });
-  const side = sideOf(team);
-  turrets.forEach((t, i) => {
-    if (t.side === side && !state.deadTurrets.has(i)) list.push({ name: `${t.side === 'blue' ? 'Blue' : 'Red'} ${t.lane} turret`, x: t.x, z: t.z, sight: state.sight.turret, turret: i });
-  });
-  return list;
-}
+const sources = (team) => teamSources(team, { ...state, turrets });
 
 function updateVision() {
   const myCell = grid.index(state.me.x, state.me.z);
@@ -148,7 +138,7 @@ function updateVision() {
 function seenBy() {
   const i = grid.index(state.me.x, state.me.z);
   if (!has(enemyBits, i)) return [];
-  return sources('enemy').filter((s) => has(vision.source(s.x, s.z, s.sight), i)).map((s) => s.name);
+  return whoSees(grid, vision, sources('enemy'), state.me.x, state.me.z);
 }
 
 // ---------------------------------------------------------------- layers

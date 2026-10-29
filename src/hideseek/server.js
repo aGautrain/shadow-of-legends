@@ -15,10 +15,12 @@ const round2 = (v) => Math.round(v * 100) / 100;
 
 export class Server {
   // send(id, msg) delivers to one player, the host's own player included.
-  constructor(grid, vision, send) {
+  // now() is the clock in ms; tests pass a fake one.
+  constructor(grid, vision, send, now = () => performance.now()) {
     this.grid = grid;
     this.vision = vision;
     this.send = send;
+    this.now = now;
     this.players = new Map();
     this.settings = { hide: RULES.hide, seek: RULES.seek, training: false };
     this.phase = 'lobby';
@@ -28,7 +30,7 @@ export class Server {
     this.wards = [];
     this.results = [];
     this.timer = setInterval(() => this.tick(), 1000 / NET_RATE);
-    this.last = performance.now();
+    this.last = this.now();
   }
 
   close() { clearInterval(this.timer); }
@@ -51,7 +53,7 @@ export class Server {
   message(id, m) {
     if (!m || typeof m !== 'object') return;
     const p = this.players.get(id);
-    if (p) p.lastSeen = performance.now();
+    if (p) p.lastSeen = this.now();
 
     if (m.t === 'hello') return this.hello(id, m);
     if (!p) return;
@@ -96,7 +98,7 @@ export class Server {
     const team = TEAMS.includes(m.team) ? m.team : count('blue') <= count('red') ? 'blue' : 'red';
     this.players.set(id, {
       id, name: cleanName(m.name) || 'Player', team, ready: false, champion: null,
-      x: 0, z: 0, caught: false, spot: 0, wards: 0, lastSeen: performance.now(),
+      x: 0, z: 0, caught: false, spot: 0, wards: 0, lastSeen: this.now(),
     });
     this.send(id, { t: 'welcome', id });
     this.broadcastRoom();
@@ -110,7 +112,7 @@ export class Server {
       players: [...this.players.values()].map(({ id, name, team, ready, champion }) => ({ id, name, team, ready, champion })),
       settings: this.settings,
       phase: this.phase,
-      countdown: this.countdownAt ? Math.max(0, this.countdownAt - performance.now()) : null,
+      countdown: this.countdownAt ? Math.max(0, this.countdownAt - this.now()) : null,
     };
   }
 
@@ -125,7 +127,7 @@ export class Server {
 
   checkStart() {
     const ok = this.canStart();
-    if (ok && !this.countdownAt) this.countdownAt = performance.now() + RULES.countdown * 1000;
+    if (ok && !this.countdownAt) this.countdownAt = this.now() + RULES.countdown * 1000;
     else if (!ok && this.countdownAt) this.countdownAt = 0;
     else return;
     this.broadcastRoom();
@@ -173,8 +175,8 @@ export class Server {
 
   setPhase(phase, seconds, extra = {}) {
     this.phase = phase;
-    this.endsAt = performance.now() + seconds * 1000;
-    if (phase === 'seek') this.seekStart = performance.now();
+    this.endsAt = this.now() + seconds * 1000;
+    if (phase === 'seek') this.seekStart = this.now();
     this.broadcast({ t: 'phase', phase, round: this.round, seekTeam: this.seekTeam, ms: seconds * 1000, settings: this.settings, results: this.results, ...extra });
   }
 
@@ -187,7 +189,7 @@ export class Server {
   }
 
   endRound() {
-    const now = performance.now();
+    const now = this.now();
     const seekTime = this.phase === 'seek' ? (now - this.seekStart) / 1000 : 0;
     const hiders = this.hiders();
     const caught = hiders.filter((p) => p.caught).length;
@@ -225,7 +227,7 @@ export class Server {
   // ------------------------------------------------------------ tick
 
   tick() {
-    const now = performance.now();
+    const now = this.now();
     const dt = Math.min(0.5, (now - this.last) / 1000);
     this.last = now;
 
@@ -268,7 +270,7 @@ export class Server {
   spot(dt) {
     const sources = this.seekerSources();
     const bits = this.vision.merge(sources.map((s) => this.vision.source(s.x, s.z, s.sight)));
-    const t = (performance.now() - this.seekStart) / 1000;
+    const t = (this.now() - this.seekStart) / 1000;
     for (const h of this.hiders()) {
       if (h.caught) continue;
       const cell = this.grid.index(h.x, h.z);
@@ -293,7 +295,7 @@ export class Server {
   }
 
   snapshot() {
-    const ms = Math.max(0, this.endsAt - performance.now());
+    const ms = Math.max(0, this.endsAt - this.now());
     const p = [...this.players.values()].map((q) => [q.id, Math.round(q.x), Math.round(q.z), q.caught ? 1 : 0, round2(Math.min(q.spot, RULES.catchTime)), q.wards]);
     const w = this.wards.map((x) => [x.owner, Math.round(x.x), Math.round(x.z)]);
     this.broadcast({ t: 'snap', ms, p, w });
