@@ -109,7 +109,7 @@ where the fog hides people.
 
 1. **Lobby.** One player creates a room and shares its link
    (`hide-and-seek/#CODE`). Everyone who opens it picks a name and a team
-   (Blue or Red), optionally picks a champion, and clicks Ready. Every
+   (Blue or Red), picks a champion (required before Ready), and clicks Ready. Every
    champion of the live game is offered (list, portraits and splash art come
    from Riot's Data Dragon CDN at runtime, so new champions appear on their
    own); a champion can be taken by one player only. The champion is

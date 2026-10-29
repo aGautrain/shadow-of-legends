@@ -195,6 +195,8 @@ function renderLobby() {
   setSplash(me && me.champion);
   $('ready').textContent = me && me.ready ? 'Ready ✓' : 'Ready';
   $('ready').classList.toggle('on', !!(me && me.ready));
+  $('ready').disabled = !(me && me.champion);
+  $('ready').title = me && me.champion ? '' : 'Pick a champion first';
 
   const s = room.settings;
   $('set-hide').value = s.hide;
@@ -216,8 +218,12 @@ function lobbyStatus() {
   } else if (list.length < 2 || !TEAMS.every((t) => list.some((p) => p.team === t))) {
     el.textContent = 'Waiting for players: each team needs at least one. Share the invite link.';
   } else {
-    const waiting = list.filter((p) => !p.ready).map((p) => p.name);
-    el.textContent = `Waiting for ${waiting.join(', ')} to be ready.`;
+    const noChamp = list.filter((p) => !p.champion).map((p) => p.name);
+    const waiting = list.filter((p) => p.champion && !p.ready).map((p) => p.name);
+    el.textContent = [
+      noChamp.length ? `${noChamp.join(', ')} must pick a champion.` : '',
+      waiting.length ? `Waiting for ${waiting.join(', ')} to be ready.` : '',
+    ].filter(Boolean).join(' ');
   }
 }
 // ---------------------------------------------------------------- champions
@@ -252,7 +258,7 @@ loadChampions().then((list) => {
   for (const c of list) champById.set(c.id, c);
   $('champ-grid').innerHTML = list.length
     ? list.map((c) => `<button data-champ="${c.id}" title="${escapeHtml(c.name)}"><img src="${c.icon}" alt="" loading="lazy" width="48" height="48"><span>${escapeHtml(c.name)}</span></button>`).join('')
-    : '<p class="empty">Could not load the champion list from Riot\'s servers. You can still play without one.</p>';
+    : '<p class="empty">Could not load the champion list from Riot\'s servers. Reload the page to try again: a champion is needed to be ready.</p>';
   filterChampions();
   if (room) { renderLobby(); renderBoard(); }
 });
@@ -267,8 +273,7 @@ function renderChampions() {
     b.disabled = !!by;
     b.title = by ? `${name} (picked by ${by})` : name;
   }
-  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one, or play without';
-  $('champ-clear').hidden = !mine;
+  $('champ-note').textContent = mine && champById.has(mine) ? `· ${champById.get(mine).name}` : '· pick one to be ready';
 }
 
 function filterChampions() {
@@ -284,7 +289,6 @@ $('champ-grid').addEventListener('click', (e) => {
   if (b && !b.disabled) send({ t: 'set', champion: b.dataset.champ });
 });
 $('champ-search').addEventListener('input', filterChampions);
-$('champ-clear').addEventListener('click', () => send({ t: 'set', champion: null }));
 
 // The countdown arrives as time left; keep it as a local deadline.
 let countdownEnd = 0;

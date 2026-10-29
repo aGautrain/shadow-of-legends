@@ -58,10 +58,10 @@ export class Server {
     if (m.t === 'set' && this.phase === 'lobby') {
       if (m.name !== undefined && cleanName(m.name)) p.name = cleanName(m.name);
       if (TEAMS.includes(m.team) && m.team !== p.team) { p.team = m.team; p.ready = false; }
-      if (typeof m.ready === 'boolean') p.ready = m.ready;
-      // Each champion can be picked by one player only; null clears the pick.
-      if (m.champion === null) p.champion = null;
-      else if (validChampionId(m.champion) && ![...this.players.values()].some((q) => q !== p && q.champion === m.champion)) p.champion = m.champion;
+      // Each champion can be picked by one player only.
+      if (validChampionId(m.champion) && ![...this.players.values()].some((q) => q !== p && q.champion === m.champion)) p.champion = m.champion;
+      // No champion, no ready.
+      if (typeof m.ready === 'boolean') p.ready = m.ready && !!p.champion;
       this.broadcastRoom();
       this.checkStart();
     } else if (m.t === 'settings' && id === HOST_ID && this.phase === 'lobby') {
