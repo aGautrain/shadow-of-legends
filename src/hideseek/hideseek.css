@@ -107,6 +107,13 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .spell-card h3 { margin: 0 0 2px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
 .spell-card p { margin: 0; font-size: 13px; }
 @media (max-width: 560px) { .spell-card .sc-roles { grid-template-columns: 1fr; } }
+/* Wide screens: the card floats right of the lobby column (680 wide,
+   centered) instead of pushing the champion grid down. */
+@media (min-width: 1380px) {
+  .spell-card { position: fixed; top: 48px; left: calc(50% + 360px); width: 300px; z-index: 1; margin: 0;
+    padding: 14px; background: var(--panel); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+  .spell-card .sc-roles { grid-template-columns: 1fr; gap: 10px; }
+}
 .champ-grid button.picked { border-color: var(--gold); background: #2a2516; }
 .champ-grid button.taken { opacity: 0.3; filter: grayscale(1); }
 .champ-grid .empty { grid-column: 1 / -1; color: var(--muted); }
