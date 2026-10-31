@@ -416,7 +416,11 @@ function onPhase(m) {
   if (m.settings) game.settings = m.settings;
   game.endsAt = performance.now() + (m.ms || 0);
 
-  if (m.phase === 'lobby') { others.clear(); wards = []; path = []; showScreen('lobby'); renderLobby(); return; }
+  if (m.phase === 'lobby') {
+    others.clear(); wards = []; path = []; showScreen('lobby'); renderLobby();
+    if (m.aborted) { $('lobby-status').className = 'status-line'; $('lobby-status').textContent = t('hs.aborted'); }
+    return;
+  }
   showScreen('game');
   if (m.phase === 'hide') {
     const s = m.spawns[myId];
@@ -460,7 +464,8 @@ function onSnap(m) {
     else others.set(id, { x, z, tx: x, tz: z, caught: !!caught, spot, flags });
   }
   for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
-  wards = m.w.map(([owner, x, z, ms]) => ({ owner, x, z, ms }));
+  const at = performance.now();
+  wards = m.w.map(([owner, x, z, ms]) => ({ owner, x, z, fadeAt: at + ms }));
   flares = (m.f || []).map(([owner, x, z, fx, fz]) => ({ owner, x, z, fx, fz }));
   needsDraw = true;
   renderBoard();
@@ -627,6 +632,14 @@ function draw() {
     ctx.fillStyle = COLORS.ward; ctx.strokeStyle = COLORS[p.team]; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(x, y - r * 1.3); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r * 1.3); ctx.lineTo(x - r, y); ctx.closePath();
     ctx.fill(); ctx.stroke();
+    // seconds left before your team's ward fades
+    if (p.team === team) {
+      const left = Math.max(0, Math.ceil((w.fadeAt - performance.now()) / 1000));
+      ctx.font = '600 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.fillStyle = left <= 5 ? '#ffb4a8' : '#fff';
+      ctx.strokeText(`${left}s`, x, y + r * 1.3 + 12); ctx.fillText(`${left}s`, x, y + r * 1.3 + 12);
+      ctx.textAlign = 'start';
+    }
   }
 
   // Tank and Marksman areas, seen by both teams in their caster's light team color
@@ -765,6 +778,7 @@ function renderBoard() {
 }
 
 function syncButtons() {
+  $('abort-btn').hidden = !(isHost() && (playing() || game.phase === 'break'));
   const canWard = wardPhase() && me.wards > 0 && !me.caught;
   const allowance = game.settings ? (isSeeker() ? game.settings.seekerWards : game.settings.hiderWards) : 0;
   $('ward-btn').hidden = !(playing() && allowance > 0);
@@ -1007,6 +1021,7 @@ window.addEventListener('keydown', (e) => {
 });
 $('ward-btn').addEventListener('click', () => placeWard(null));
 $('spell-btn').addEventListener('click', () => castSpell(cursor));
+$('abort-btn').addEventListener('click', () => { if (confirm(t('hs.abortConfirm'))) send({ t: 'lobby' }); });
 $('follow-btn').addEventListener('click', () => { camera.follow = !camera.follow; syncButtons(); needsDraw = true; });
 window.addEventListener('resize', resize);
 

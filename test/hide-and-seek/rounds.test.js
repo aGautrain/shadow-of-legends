@@ -433,3 +433,50 @@ test('after round 2 the game shows results, and only the host returns to the lob
   assert.deepEqual(room.server.results, []);
   assert.ok([...room.server.players.values()].every((p) => !p.ready && !p.caught));
 });
+
+test('the host can end a running game: everyone back to the lobby, picks kept', () => {
+  for (const phase of ['hide', 'seek', 'break']) {
+    const room = startedRoom([['r1', 'red'], ['b2', 'blue']]);
+    room.send(HOST_ID, { t: 'settings', seekerWards: 4 }); // ignored: not in the lobby
+    room.move('r1', 5000, 5000);
+    if (phase !== 'hide') toSeek(room);
+    if (phase === 'break') { room.move(HOST_ID, 5000, 5600); room.advance(2.2); }
+    assert.equal(room.server.phase, phase);
+    const before = Object.fromEntries([...room.server.players.values()].map((p) => [p.id, [p.name, p.team, p.champion]]));
+
+    room.send('r1', { t: 'lobby' });
+    assert.equal(room.server.phase, phase, 'only the host can');
+    room.send(HOST_ID, { t: 'lobby' });
+    assert.equal(room.server.phase, 'lobby');
+    assert.deepEqual(room.last('r1', 'phase'), { t: 'phase', phase: 'lobby', aborted: true });
+    assert.equal(room.server.round, 0);
+    assert.deepEqual(room.server.results, []);
+    assert.deepEqual(room.server.wards, []);
+    for (const p of room.server.players.values()) {
+      assert.deepEqual([p.name, p.team, p.champion], before[p.id], `${p.id} keeps name, team and champion`);
+      assert.equal(p.ready, false);
+      assert.equal(p.caught, false);
+    }
+    assert.equal(room.server.settings.catchTime, SCENARIO.catchTime, 'settings kept');
+    room.advance(5);
+    assert.equal(room.server.phase, 'lobby', 'no round restarts on its own');
+  }
+});
+
+test('back to the lobby from the results is not an abort', () => {
+  const room = startedRoom([['r1', 'red']]);
+  room.server.finish();
+  room.send(HOST_ID, { t: 'lobby' });
+  assert.deepEqual(room.last('r1', 'phase'), { t: 'phase', phase: 'lobby' });
+});
+
+test('wards in the snapshot carry the time left before they fade', () => {
+  const room = startedRoom([['r1', 'red']]);
+  room.move('r1', 12000, 3000);
+  toSeek(room);
+  room.move(HOST_ID, 5000, 5000);
+  room.send(HOST_ID, { t: 'ward', x: 5200, z: 5000 });
+  room.advance(10);
+  const [, , , ms] = room.last(HOST_ID, 'snap').w[0];
+  assert.ok(Math.abs(ms - 20000) <= 100, `${ms} ms left`);
+});

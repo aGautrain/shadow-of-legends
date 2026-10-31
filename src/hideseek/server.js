@@ -99,8 +99,9 @@ export class Server {
       this.wards.push({ owner: id, team: p.team, x: spot.x, z: spot.z, until: this.now() + this.settings.wardLife * 1000 });
     } else if (m.t === 'cast') {
       this.cast(p, m);
-    } else if (m.t === 'lobby' && id === HOST_ID && this.phase === 'results') {
-      this.toLobby();
+    } else if (m.t === 'lobby' && id === HOST_ID && this.phase !== 'lobby') {
+      // The host can end a running game too; everyone keeps name, team and champion.
+      this.toLobby(this.phase !== 'results');
     }
   }
 
@@ -150,7 +151,7 @@ export class Server {
     this.broadcastRoom();
   }
 
-  toLobby() {
+  toLobby(aborted = false) {
     this.phase = 'lobby';
     this.round = 0;
     this.results = [];
@@ -158,7 +159,7 @@ export class Server {
     this.flares = [];
     for (const p of this.players.values()) { p.ready = false; p.caught = false; p.spot = 0; }
     this.broadcastRoom();
-    this.broadcast({ t: 'phase', phase: 'lobby' });
+    this.broadcast({ t: 'phase', phase: 'lobby', ...(aborted ? { aborted: true } : {}) });
   }
 
   // ------------------------------------------------------------ rounds
