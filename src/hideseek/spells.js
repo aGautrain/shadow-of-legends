@@ -7,7 +7,7 @@ export const SPELLS = {
   Assassin: { cooldown: 30, duration: 3 },
   Fighter: { cooldown: 18, duration: 3, speed: 1.4 },
   Tank: { cooldown: 30, radius: 1000, root: 1.5 },
-  Marksman: { cooldown: 30, range: 3000, radius: 500, duration: 3 },
+  Marksman: { cooldown: 30, radius: 500, trail: 250, duration: 3 }, // anywhere on the map
   Support: { cooldown: 30, radius: 900 },
 };
 
@@ -16,6 +16,7 @@ export const SPELLS = {
 export function spellStats(sp, fmt = String) {
   const out = [['Cooldown', `${fmt(sp.cooldown)} s`]];
   if (sp.range) out.push(['Range', fmt(sp.range)]);
+  if (sp.trail) out.push(['Range', '∞']);
   if (sp.radius) out.push(['Radius', fmt(sp.radius)]);
   if (sp.speed) out.push(['Speed', `+${fmt(Math.round((sp.speed - 1) * 100))}%`]);
   if (sp.duration) out.push(['Duration', `${fmt(sp.duration)} s`]);
@@ -27,6 +28,14 @@ export const CATEGORIES = Object.keys(SPELLS);
 
 // Category from a champion's Data Dragon tags, or null.
 export const categoryOf = (tags) => (Array.isArray(tags) && SPELLS[tags[0]] ? tags[0] : null);
+
+// Points along a Flare's trail, from the caster to the target, each seeing
+// `trail` around it, close enough that their circles overlap.
+export function trailPoints(fx, fz, x, z, spacing = SPELLS.Marksman.trail) {
+  const d = Math.hypot(x - fx, z - fz);
+  const n = Math.max(1, Math.ceil(d / spacing));
+  return Array.from({ length: n + 1 }, (_, k) => ({ x: fx + ((x - fx) * k) / n, z: fz + ((z - fz) * k) / n }));
+}
 
 // Brings a cast target within range of (x, z), on the line toward it.
 export function clampRange(x, z, tx, tz, range) {

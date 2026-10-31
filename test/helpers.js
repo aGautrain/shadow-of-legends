@@ -125,7 +125,7 @@ export function makeRoom(grid = hideSeekGrid()) {
 // Fixed numbers the game scenarios are written against, sent by the host
 // before starting, so tuning the defaults in rules.js doesn't rewrite every
 // scenario. The defaults themselves have their own tests.
-export const SCENARIO = { catchTime: 2, seekerWards: 2, hiderWards: 0 };
+export const SCENARIO = { catchTime: 2, seekerWards: 2, hiderWards: 0, wardLife: 30 };
 
 // A lobby with the host on Blue and the given players, everyone ready, then
 // run through the countdown so round 1's hide phase has begun.

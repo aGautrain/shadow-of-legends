@@ -83,6 +83,7 @@
         <label class="row"><span data-i18n="hs.set.catch">Temps à vue avant d'être attrapé</span> <select id="set-catch"></select></label>
         <label class="row"><span data-i18n="hs.set.seekerWards">Balises par chercheur</span> <select id="set-seeker-wards"></select></label>
         <label class="row"><span data-i18n="hs.set.hiderWards">Balises par caché</span> <select id="set-hider-wards"></select></label>
+        <label class="row"><span data-i18n="hs.set.wardLife">Durée d'une balise</span> <select id="set-ward-life"></select></label>
         <label class="check"><input type="checkbox" id="set-training"> <span data-i18n="hs.set.training">Entraînement : les cachés voient la vision des chercheurs en rouge</span></label>
         <label class="check"><input type="checkbox" id="set-fantasy"> <span data-i18n="hs.set.fantasy">Fantasy : chaque champion reçoit un sort selon sa classe (E)</span></label>
       </fieldset>
@@ -94,8 +95,8 @@
         <ul>
           <li data-i18n-html="hs.rule.rounds">Manche 1 : <span class="blue-text">Bleu</span> cherche et <span class="red-text">Rouge</span> se cache. Manche 2 : l'inverse.</li>
           <li data-i18n-html="hs.rule.hide"><strong>Phase de cache :</strong> les cachés quittent leur fontaine et trouvent une planque. Les chercheurs attendent dans la leur.</li>
-          <li data-i18n-html="hs.rule.seek"><strong>Phase de recherche :</strong> un caché qui reste dans la vision de l'équipe qui cherche pendant <span id="rule-catch"></span> s d'affilée est attrapé. Les buissons vous cachent, sauf si un chercheur ou une balise est dans le même buisson, et les murs bloquent la vue.</li>
-          <li data-i18n-html="hs.rule.wardKey"><span id="rule-wards"></span> Appuyez sur <kbd>W</kbd> pour poser une balise furtive au curseur. La balise d'un chercheur aide à attraper les cachés ; celle d'un caché montre seulement aux cachés où sont les chercheurs.</li>
+          <li data-i18n-html="hs.rule.seek"><strong>Phase de recherche :</strong> un caché qui reste à vue d'un chercheur pendant <span id="rule-catch"></span> s d'affilée est attrapé. Balises et Fusées révèlent seulement les cachés, elles n'attrapent jamais. Les buissons vous cachent, sauf si un chercheur ou une balise est dans le même buisson, et les murs bloquent la vue.</li>
+          <li data-i18n-html="hs.rule.wardKey"><span id="rule-wards"></span> Appuyez sur <kbd>W</kbd> pour poser une balise furtive au curseur. Elle montre à votre équipe ce qui l'entoure, puis disparaît après <span id="rule-ward-life"></span> s et vous revient.</li>
           <li id="rule-fantasy"></li>
           <li data-i18n="hs.rule.win">L'équipe qui attrape la plus grande part de cachés gagne ; en cas d'égalité, la plus rapide.</li>
           <li data-i18n-html="hs.rule.keys"><kbd>Clic droit</kbd> se déplacer · <kbd>Glisser</kbd> déplacer la vue · <kbd>Molette</kbd> zoom · <kbd>Y</kbd> verrouiller la caméra · <kbd>Espace</kbd> centrer · Sur écran tactile : touchez pour vous déplacer.</li>

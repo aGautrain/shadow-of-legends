@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES } from '../../src/hideseek/rules.js';
-import { SPELLS, categoryOf, blinkTarget, spellStats } from '../../src/hideseek/spells.js';
+import { SPELLS, categoryOf, blinkTarget, spellStats, trailPoints } from '../../src/hideseek/spells.js';
 import { LANGS, STRINGS } from '../../src/i18n.js';
 import { makeRoom, openGrid, at, HOST_ID, SCENARIO } from '../helpers.js';
 
@@ -41,7 +41,8 @@ test('the spells have the agreed numbers', () => {
   assert.equal(SPELLS.Assassin.duration, 3); assert.equal(SPELLS.Assassin.cooldown, 30);
   assert.equal(SPELLS.Fighter.speed, 1.4); assert.equal(SPELLS.Fighter.duration, 3); assert.equal(SPELLS.Fighter.cooldown, 18);
   assert.equal(SPELLS.Tank.radius, 1000); assert.equal(SPELLS.Tank.root, 1.5); assert.equal(SPELLS.Tank.cooldown, 30);
-  assert.equal(SPELLS.Marksman.range, 3000); assert.equal(SPELLS.Marksman.radius, 500); assert.equal(SPELLS.Marksman.duration, 3);
+  assert.equal(SPELLS.Marksman.range, undefined, 'no range limit'); assert.equal(SPELLS.Marksman.radius, 500); assert.equal(SPELLS.Marksman.duration, 3);
+  assert.equal(SPELLS.Marksman.trail, 250);
   assert.equal(SPELLS.Marksman.cooldown, 30);
   assert.equal(SPELLS.Support.radius, 900); assert.equal(SPELLS.Support.cooldown, 30);
 });
@@ -53,7 +54,7 @@ test('each spell explains itself for hiders and seekers, with its numbers', () =
   }
   assert.deepEqual(spellStats(SPELLS.Tank), [['Cooldown', '30 s'], ['Radius', '1000'], ['Root', '1.5 s']]);
   assert.deepEqual(spellStats(SPELLS.Fighter), [['Cooldown', '18 s'], ['Speed', '+40%'], ['Duration', '3 s']]);
-  assert.deepEqual(spellStats(SPELLS.Marksman), [['Cooldown', '30 s'], ['Range', '3000'], ['Radius', '500'], ['Duration', '3 s']]);
+  assert.deepEqual(spellStats(SPELLS.Marksman), [['Cooldown', '30 s'], ['Range', '∞'], ['Radius', '500'], ['Duration', '3 s']]);
 });
 
 test('the room message tells each player\'s category', () => {
@@ -234,23 +235,27 @@ test('Tank: a hider can root seekers to escape', () => {
   assert.equal(room.player(HOST_ID).z, 5600);
 });
 
-test('Marksman: a seeker\'s Flare sees and catches far away, then fades after 3 s', () => {
-  const room = fantasyRoom([[HOST_ID, 'blue', 'Marksman'], ['r1', 'red', null], ['r2', 'red', null]]);
-  room.move('r1', 7500, 5000);
-  room.move('r2', 9000, 5000);
+test('Marksman: a seeker\'s Flare reaches anywhere and lights its trail, but never catches; it fades after 3 s', () => {
+  const room = fantasyRoom([[HOST_ID, 'blue', 'Marksman'], ['r1', 'red', null]]);
+  room.move('r1', 12000, 5000);
   toSeek(room);
-  room.move(HOST_ID, 5000, 5000);
-  cast(room, HOST_ID, 9000, 5000);
-  assert.equal(room.all('r1', 'spell').length, 0, 'beyond 3000');
-  cast(room, HOST_ID, 7500, 5000);
-  assert.deepEqual(room.last('r1', 'spell'), { t: 'spell', id: HOST_ID, category: 'Marksman', team: 'blue', x: 7500, z: 5000, radius: 500, ms: 3000 });
+  room.move(HOST_ID, 2000, 5000);
+  cast(room, HOST_ID, 12000, 5000); // 10000 away
+  assert.deepEqual(room.last('r1', 'spell'), { t: 'spell', id: HOST_ID, category: 'Marksman', team: 'blue', x: 12000, z: 5000, from: [2000, 5000], radius: 500, ms: 3000 });
   room.advance(0.2);
-  assert.deepEqual(room.last('r1', 'snap').f, [[HOST_ID, 7500, 5000]], 'both teams get the area');
-  room.advance(2.1);
-  assert.equal(room.player('r1').caught, true);
-  assert.equal(room.player('r1').caughtBy, HOST_ID);
-  room.advance(0.8);
+  assert.deepEqual(room.last('r1', 'snap').f, [[HOST_ID, 12000, 5000, 2000, 5000]], 'both teams get the area and the trail');
+  room.advance(2.5);
+  assert.equal(room.player('r1').spot, 0, 'reveals only');
+  assert.equal(room.player('r1').caught, false);
+  room.advance(0.5);
   assert.deepEqual(room.last('r1', 'snap').f, []);
+});
+
+test('a Flare\'s trail points cover the line from caster to target', () => {
+  const pts = trailPoints(0, 0, 1000, 0, 250);
+  assert.deepEqual(pts.map((p) => p.x), [0, 250, 500, 750, 1000]);
+  assert.ok(pts.every((p) => p.z === 0));
+  assert.equal(trailPoints(5, 5, 5, 5).length, 2, 'a cast on yourself still gives a point');
 });
 
 test('Marksman: a hider\'s Flare only scouts, it never spots', () => {

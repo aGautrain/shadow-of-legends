@@ -127,8 +127,10 @@ where the fog hides people.
      faster than the game's 345, to keep chases tense.
    - **Wards** (W, at the cursor, 600 range like the trinket): the host sets
      Stealth Wards per seeker (default 3) and per hider (default 1, up to 5
-     each). Hiders can ward from the hide phase on, seekers once released. A
-     hider's ward only gives the hiders vision; it never spots anyone.
+     each). Hiders can ward from the hide phase on, seekers once released.
+     A ward shows its team what is around it but never catches anyone. It
+     fades after a host-set lifetime (default 30 s, 15 to 120 s) and its
+     owner gets the charge back; a ward destroyed by Sweep is gone for good.
    - **Fantasy** (host checkbox, on by default): each champion's category is
      its first Data Dragon tag, and gives one active spell on E. Everyone can
      cast once released (hiders from the hide phase, seekers from the seek
@@ -140,13 +142,13 @@ where the fog hides people.
      | Assassin | Shroud | Invisible to the enemy team for 3 s: a hider's spotted meter cannot fill; a seeker still sees and catches | 30 s |
      | Fighter | Surge | +40% move speed for 3 s | 18 s |
      | Tank | Earthshaker | Roots every enemy within 1000 for 1.5 s | 30 s |
-     | Marksman | Flare | Reveals a 500 radius up to 3000 away for 3 s; a seeker's Flare catches like a ward | 30 s |
+     | Marksman | Flare | Reveals a 500 radius anywhere on the map, and a 250-wide trail from the caster to it, for 3 s; it never catches | 30 s |
      | Support | Sweep | Destroys enemy wards within 900, +1 ward per ward destroyed (no cap) | 30 s |
 
      Earthshaker and Flare areas are drawn for both teams, in the caster's
      team color, lightened.
-3. **Catching.** A hider is caught after being **in the seeking team's vision
-   for 1.5 s in a row** (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
+3. **Catching.** A hider is caught after being **in a seeker's own sight
+   for 1.5 s in a row** (wards and Flares only reveal) (the host can set 0.5 to 5 s; the meter drains at the same rate when they break
    sight). Same vision rules as section 2: brush hides you unless a seeker or
    ward is in that brush, walls block sight. There is no tagging by contact:
    both teams move at the same speed, so a chase would never end, and the point of the

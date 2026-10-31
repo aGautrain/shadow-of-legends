@@ -8,11 +8,11 @@ import { Vision, has } from '../vision.js';
 import { findPath } from '../path.js';
 import { blur } from '../blur.js';
 import { SIGHT, DEFAULT_FOG_EDGE, BACKGROUND, PATCHES } from '../config.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT, moveSpeed } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, WARD_LIFE_CHOICES, TEAMS, otherTeam, NET_RATE, TIMEOUT, moveSpeed } from './rules.js';
 import { openHost, openClient, newCode, cleanCode } from './net.js';
 import { Server, HOST_ID } from './server.js';
 import { loadChampions, splashUrl, searchKey } from './champions.js';
-import { SPELLS, categoryOf, clampRange, blinkTarget, spellStats } from './spells.js';
+import { SPELLS, categoryOf, blinkTarget, spellStats, trailPoints } from './spells.js';
 import { categoryIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -184,6 +184,7 @@ const isHost = () => myId === HOST_ID;
 for (const s of HIDE_CHOICES) $('set-hide').add(new Option(`${s} s`, s));
 for (const s of SEEK_CHOICES) $('set-seek').add(new Option('', s));
 for (const s of CATCH_CHOICES) $('set-catch').add(new Option('', s));
+for (const s of WARD_LIFE_CHOICES) $('set-ward-life').add(new Option(`${s} s`, s));
 // Option texts that change with the language.
 function labelOptions() {
   for (const o of $('set-seek').options) { const s = Number(o.value); o.textContent = s % 60 ? t('hs.minSec', { m: Math.floor(s / 60), s: s % 60 }) : t('hs.min', { m: s / 60 }); }
@@ -193,7 +194,7 @@ labelOptions();
 // The host's catch delay once known, else the default.
 const catchTime = () => (game.settings || (room && room.settings) || RULES).catchTime;
 for (const id of ['set-seeker-wards', 'set-hider-wards']) for (const n of WARD_CHOICES) $(id).add(new Option(String(n), n));
-const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-training', 'set-fantasy'];
+const SETTING_INPUTS = ['set-hide', 'set-seek', 'set-catch', 'set-seeker-wards', 'set-hider-wards', 'set-ward-life', 'set-training', 'set-fantasy'];
 const spellOf = (p) => (p && p.category ? SPELLS[p.category] : null);
 
 function renderLobby() {
@@ -227,6 +228,8 @@ function renderLobby() {
   $('rule-catch').textContent = num(s.catchTime);
   $('set-seeker-wards').value = s.seekerWards;
   $('set-hider-wards').value = s.hiderWards;
+  $('set-ward-life').value = s.wardLife;
+  if ($('rule-ward-life')) $('rule-ward-life').textContent = s.wardLife;
   $('set-training').checked = s.training;
   $('set-fantasy').checked = s.fantasy;
   $('rule-fantasy').hidden = !s.fantasy;
@@ -377,7 +380,7 @@ $('lobby-name').addEventListener('input', () => {
 const sendSettings = () => send({
   t: 'settings', hide: Number($('set-hide').value), seek: Number($('set-seek').value), training: $('set-training').checked,
   catchTime: Number($('set-catch').value),
-  seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value), fantasy: $('set-fantasy').checked,
+  seekerWards: Number($('set-seeker-wards').value), hiderWards: Number($('set-hider-wards').value), wardLife: Number($('set-ward-life').value), fantasy: $('set-fantasy').checked,
 });
 for (const id of SETTING_INPUTS) $(id).addEventListener('change', sendSettings);
 $('copy-link').addEventListener('click', async () => {
@@ -393,7 +396,7 @@ const game = { phase: 'lobby', round: 0, seekTeam: null, endsAt: 0, results: [],
 const me = { x: 0, z: 0, caught: false, spot: 0, wards: 0, flags: 0, cd: 0, surgeUntil: 0, rootUntil: 0 };
 const others = new Map(); // id -> { x, z, tx, tz, caught, spot, flags }
 let wards = []; // [{ owner, x, z }]
-let flares = []; // [{ owner, x, z }], Marksman reveals
+let flares = []; // [{ owner, x, z, fx, fz }], Marksman reveals: the target and the trail from fx, fz
 let effects = []; // [{ x, z, radius, team, start, until }], spell areas drawn for a moment
 const SHROUDED = 1, ROOTED = 2;
 let path = [];
@@ -457,8 +460,8 @@ function onSnap(m) {
     else others.set(id, { x, z, tx: x, tz: z, caught: !!caught, spot, flags });
   }
   for (const id of others.keys()) if (!seen.has(id)) others.delete(id);
-  wards = m.w.map(([owner, x, z]) => ({ owner, x, z }));
-  flares = (m.f || []).map(([owner, x, z]) => ({ owner, x, z }));
+  wards = m.w.map(([owner, x, z, ms]) => ({ owner, x, z, ms }));
+  flares = (m.f || []).map(([owner, x, z, fx, fz]) => ({ owner, x, z, fx, fz }));
   needsDraw = true;
   renderBoard();
   syncButtons();
@@ -518,7 +521,12 @@ function teamSources(team) {
     if (p && p.team === team && !o.caught) list.push({ x: o.x, z: o.z, sight: SIGHT.champion });
   }
   for (const w of wards) { const p = playerById(w.owner); if (p && p.team === team) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth }); }
-  for (const f of flares) { const p = playerById(f.owner); if (p && p.team === team) list.push({ x: f.x, z: f.z, sight: SPELLS.Marksman.radius }); }
+  for (const f of flares) {
+    const p = playerById(f.owner);
+    if (!p || p.team !== team) continue;
+    list.push({ x: f.x, z: f.z, sight: SPELLS.Marksman.radius });
+    for (const q of trailPoints(f.fx, f.fz, f.x, f.z)) list.push({ x: q.x, z: q.z, sight: SPELLS.Marksman.trail });
+  }
   return list;
 }
 const bitsOf = (list) => vision.merge(list.map((s) => vision.source(s.x, s.z, s.sight)));
@@ -625,7 +633,15 @@ function draw() {
   const now = performance.now();
   effects = effects.filter((e) => now < e.until);
   const areas = effects.map((e) => ({ ...e, a: 1 - (now - e.start) / (e.until - e.start) }));
-  for (const f of flares) { const p = playerById(f.owner); if (p) areas.push({ x: f.x, z: f.z, radius: SPELLS.Marksman.radius, team: p.team, a: 0.8 }); }
+  for (const f of flares) {
+    const p = playerById(f.owner);
+    if (!p) continue;
+    areas.push({ x: f.x, z: f.z, radius: SPELLS.Marksman.radius, team: p.team, a: 0.8 });
+    // the lit trail from the caster
+    ctx.strokeStyle = LIGHT[p.team] + '0.14)'; ctx.lineWidth = 2 * SPELLS.Marksman.trail * camera.scale; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(...toScreen(f.fx, f.fz)); ctx.lineTo(...toScreen(f.x, f.z)); ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
   for (const e of areas) {
     const [x, y] = toScreen(e.x, e.z);
     const r = e.radius * camera.scale;
@@ -849,7 +865,7 @@ function castSpell(target) {
     me.x = land.x; me.z = land.z; path = [];
     send({ t: 'cast', x: land.x, z: land.z });
   } else if (category === 'Marksman') {
-    send({ t: 'cast', ...clampRange(me.x, me.z, t.x, t.z, sp.range) });
+    send({ t: 'cast', x: t.x, z: t.z }); // anywhere on the map
   } else {
     send({ t: 'cast' });
   }

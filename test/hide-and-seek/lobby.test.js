@@ -144,11 +144,12 @@ test('only the host changes settings, and only to listed values', () => {
   assert.equal(room.server.settings.seekerWards, 3, 'seekers get 3 wards by default');
   assert.equal(room.server.settings.hiderWards, 1, 'hiders get 1 ward by default');
   assert.equal(room.server.settings.catchTime, 1.5, 'caught after 1.5 s by default');
+  assert.equal(room.server.settings.wardLife, 30, 'wards last 30 s by default');
   assert.equal(room.server.settings.fantasy, true, 'Fantasy is on by default');
-  room.send(HOST_ID, { t: 'settings', hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, fantasy: false });
-  const set = { hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, fantasy: false };
+  room.send(HOST_ID, { t: 'settings', hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, wardLife: 60, fantasy: false });
+  const set = { hide: 15, seek: 240, training: true, seekerWards: 4, hiderWards: 0, catchTime: 3, wardLife: 60, fantasy: false };
   assert.deepEqual(room.server.settings, set);
-  room.send(HOST_ID, { t: 'settings', hide: 40, seek: 300, training: 'yes', seekerWards: 9, hiderWards: -1, catchTime: 0, fantasy: 'no' });
+  room.send(HOST_ID, { t: 'settings', hide: 40, seek: 300, training: 'yes', seekerWards: 9, hiderWards: -1, catchTime: 0, wardLife: 10, fantasy: 'no' });
   assert.deepEqual(room.server.settings, set);
   room.send('p1', { t: 'settings', seekerWards: 0, hiderWards: 3, catchTime: 1 });
   assert.deepEqual(room.server.settings, set);

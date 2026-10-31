@@ -9,6 +9,7 @@ export const RULES = {
   seekerWards: 3, // Stealth Wards per seeker, host can change it in the lobby
   hiderWards: 1, // Stealth Wards per hider, host can change it in the lobby
   wardRange: 600, // like the trinket: placed at the cursor, up to this far
+  wardLife: 30, // a ward fades after this, and its owner gets it back; host can change it
   roundBreak: 5, // summary between the two rounds
   speed: 425, // move speed, faster than in game to keep the chase tense
   hideSpeed: 500, // move speed during the hide phase, so hiders get away fast
@@ -21,6 +22,7 @@ export const HIDE_CHOICES = [15, 20, 30, 45];
 export const SEEK_CHOICES = [60, 90, 120, 180, 240];
 export const WARD_CHOICES = [0, 1, 2, 3, 4, 5];
 export const CATCH_CHOICES = [0.5, 1, 1.5, 2, 3, 4, 5];
+export const WARD_LIFE_CHOICES = [15, 30, 45, 60, 90, 120];
 
 // Fountain spawn centers. Players are spread on a small circle around them.
 export const FOUNTAIN = {

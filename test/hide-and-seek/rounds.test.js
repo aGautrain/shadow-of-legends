@@ -217,7 +217,10 @@ test('seekers can place up to two wards in range during the seek phase', () => {
   room.send(HOST_ID, { t: 'ward', x: 5300, z: 5000 });
   room.send(HOST_ID, { t: 'ward', x: 5000, z: 5300 });
   room.send(HOST_ID, { t: 'ward', x: 4700, z: 5000 });
-  assert.deepEqual(room.server.wards, [{ owner: HOST_ID, team: 'blue', x: 5300, z: 5000 }, { owner: HOST_ID, team: 'blue', x: 5000, z: 5300 }]);
+  assert.deepEqual(room.server.wards, [
+    { owner: HOST_ID, team: 'blue', x: 5300, z: 5000, until: room.now + 30000 },
+    { owner: HOST_ID, team: 'blue', x: 5000, z: 5300, until: room.now + 30000 },
+  ]);
   assert.equal(host.wards, 0);
 });
 
@@ -241,7 +244,7 @@ test('hiders with wards can place them from the hide phase on', () => {
   const room = wardRoom(2, 2);
   room.move('r1', 5000, 5000);
   room.send('r1', { t: 'ward', x: 5200, z: 5000 });
-  assert.deepEqual(room.server.wards, [{ owner: 'r1', team: 'red', x: 5200, z: 5000 }]);
+  assert.deepEqual(room.server.wards, [{ owner: 'r1', team: 'red', x: 5200, z: 5000, until: room.now + 30000 }]);
   toSeek(room);
   room.send('r1', { t: 'ward', x: 5000, z: 5200 });
   room.send('r1', { t: 'ward', x: 4800, z: 5000 });
@@ -287,16 +290,47 @@ test('a ward on a wall is moved to the nearest floor', () => {
   assert.ok(room.grid.walkable(room.grid.index(w.x, w.z), 'blue'));
 });
 
-test('wards see for the seekers and their owner gets the catch', () => {
+test('a seeker\'s ward reveals but never catches; only the seeker\'s own sight does', () => {
   const room = startedRoom([['r1', 'red']]);
   room.move('r1', 5000, 5000);
   toSeek(room);
   room.move(HOST_ID, 5000, 4300);
   room.send(HOST_ID, { t: 'ward', x: 5000, z: 4600 });
   room.move(HOST_ID, 1000, 1000); // walks away
+  room.advance(3);
+  assert.equal(room.player('r1').spot, 0);
+  assert.equal(room.player('r1').caught, false);
+  room.move(HOST_ID, 5000, 4600); // comes back to look
   room.advance(2.2);
   assert.equal(room.player('r1').caught, true);
   assert.equal(room.player('r1').caughtBy, HOST_ID);
+});
+
+test('a ward fades after the host\'s lifetime and comes back to its owner', () => {
+  const room = makeRoom();
+  room.join(HOST_ID, 'Host', 'blue');
+  room.join('r1', 'r1', 'red');
+  room.send(HOST_ID, { t: 'settings', ...SCENARIO, wardLife: 15 });
+  room.ready(HOST_ID, 'r1');
+  room.advance(RULES.countdown + 0.1);
+  room.move('r1', 12000, 3000);
+  toSeek(room);
+  room.move(HOST_ID, 5000, 5000);
+  room.send(HOST_ID, { t: 'ward', x: 5200, z: 5000 });
+  room.send(HOST_ID, { t: 'ward', x: 5000, z: 5200 });
+  assert.equal(room.player(HOST_ID).wards, 0);
+  room.advance(14.8);
+  assert.equal(room.server.wards.length, 2);
+  assert.equal(room.last(HOST_ID, 'snap').w[0][3] <= 300, true, 'the snapshot tells how long is left');
+  room.advance(0.4);
+  assert.equal(room.server.wards.length, 0);
+  assert.equal(room.player(HOST_ID).wards, 2, 'both charges are back');
+  room.send(HOST_ID, { t: 'ward', x: 5200, z: 5000 });
+  assert.equal(room.server.wards.length, 1, 'and can be placed again');
+});
+
+test('the default ward lifetime is 30 s', () => {
+  assert.equal(RULES.wardLife, 30);
 });
 
 test('a seeker who leaves takes their wards with them', () => {

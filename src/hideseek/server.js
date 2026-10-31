@@ -7,7 +7,7 @@ import { has } from '../vision.js';
 import { SIGHT } from '../config.js';
 import { validChampionId } from './champions.js';
 import { SPELLS, blinkTarget } from './spells.js';
-import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
+import { RULES, HIDE_CHOICES, SEEK_CHOICES, WARD_CHOICES, CATCH_CHOICES, WARD_LIFE_CHOICES, FOUNTAIN, TEAMS, seekerOf, NET_RATE, TIMEOUT } from './rules.js';
 
 export const HOST_ID = 'host';
 
@@ -23,7 +23,7 @@ export class Server {
     this.send = send;
     this.now = now;
     this.players = new Map();
-    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false, seekerWards: RULES.seekerWards, hiderWards: RULES.hiderWards, catchTime: RULES.catchTime, fantasy: true };
+    this.settings = { hide: RULES.hide, seek: RULES.seek, training: false, seekerWards: RULES.seekerWards, hiderWards: RULES.hiderWards, catchTime: RULES.catchTime, wardLife: RULES.wardLife, fantasy: true };
     // Champion id -> Fantasy category, filled by the page once Data Dragon answers.
     this.categories = new Map();
     this.phase = 'lobby';
@@ -77,6 +77,7 @@ export class Server {
       if (WARD_CHOICES.includes(m.seekerWards)) this.settings.seekerWards = m.seekerWards;
       if (WARD_CHOICES.includes(m.hiderWards)) this.settings.hiderWards = m.hiderWards;
       if (CATCH_CHOICES.includes(m.catchTime)) this.settings.catchTime = m.catchTime;
+      if (WARD_LIFE_CHOICES.includes(m.wardLife)) this.settings.wardLife = m.wardLife;
       if (typeof m.fantasy === 'boolean') this.settings.fantasy = m.fantasy;
       this.broadcastRoom();
     } else if (m.t === 'pos') {
@@ -95,7 +96,7 @@ export class Server {
       const spot = this.grid.nearestWalkable(x, z, p.team);
       if (!spot) return;
       p.wards--;
-      this.wards.push({ owner: id, team: p.team, x: spot.x, z: spot.z });
+      this.wards.push({ owner: id, team: p.team, x: spot.x, z: spot.z, until: this.now() + this.settings.wardLife * 1000 });
     } else if (m.t === 'cast') {
       this.cast(p, m);
     } else if (m.t === 'lobby' && id === HOST_ID && this.phase === 'results') {
@@ -273,6 +274,12 @@ export class Server {
       return;
     }
     this.flares = this.flares.filter((f) => now < f.until);
+    // A faded ward goes back to its owner.
+    for (const w of this.wards.filter((x) => now >= x.until)) {
+      const owner = this.players.get(w.owner);
+      if (owner) owner.wards++;
+    }
+    this.wards = this.wards.filter((w) => now < w.until);
     if (this.phase === 'hide' && now >= this.endsAt) this.setPhase('seek', this.settings.seek);
     if (this.phase === 'seek') {
       this.spot(dt);
@@ -281,13 +288,10 @@ export class Server {
     if (this.phase === 'hide' || this.phase === 'seek') this.snapshot();
   }
 
+  // Only a seeker's own sight catches. Wards and Flares reveal hiders to the
+  // seekers (their clients draw them) but never fill the meter.
   seekerSources() {
-    const list = this.seekers().map((p) => ({ x: p.x, z: p.z, sight: SIGHT.champion, owner: p.id }));
-    // Hiders' wards only give their own team vision; they never catch anyone.
-    for (const w of this.wards) if (w.team === this.seekTeam) list.push({ x: w.x, z: w.z, sight: SIGHT.stealth, owner: w.owner });
-    // A seeker's Flare sees, and catches, like a ward.
-    for (const f of this.flares) if (f.team === this.seekTeam) list.push({ x: f.x, z: f.z, sight: SPELLS.Marksman.radius, owner: f.owner });
-    return list;
+    return this.seekers().map((p) => ({ x: p.x, z: p.z, sight: SIGHT.champion, owner: p.id }));
   }
 
   // Fill or drain each hider's spotted meter, and catch the ones that fill it.
@@ -353,9 +357,11 @@ export class Server {
       for (const q of hit) q.rootUntil = now + spell.root * 1000;
       Object.assign(out, { x: p.x, z: p.z, radius: spell.radius, ms: spell.root * 1000, hit: hit.map((q) => q.id) });
     } else if (category === 'Marksman') {
-      if (!target || Math.hypot(x - p.x, z - p.z) > spell.range + 100) return;
-      this.flares.push({ owner: p.id, team: p.team, x, z, until: now + spell.duration * 1000 });
-      Object.assign(out, { x, z, radius: spell.radius, ms: spell.duration * 1000 });
+      // No range limit; it also lights the trail from the caster to the target.
+      if (!target) return;
+      const fx = Math.round(p.x), fz = Math.round(p.z);
+      this.flares.push({ owner: p.id, team: p.team, x, z, fx, fz, until: now + spell.duration * 1000 });
+      Object.assign(out, { x, z, from: [fx, fz], radius: spell.radius, ms: spell.duration * 1000 });
     } else if (category === 'Support') {
       const gone = this.wards.filter((w) => w.team !== p.team && Math.hypot(w.x - p.x, w.z - p.z) <= spell.radius);
       this.wards = this.wards.filter((w) => !gone.includes(w));
@@ -373,8 +379,8 @@ export class Server {
     // bits (1 shrouded, 2 rooted) and seconds until their spell is ready.
     const p = [...this.players.values()].map((q) => [q.id, Math.round(q.x), Math.round(q.z), q.caught ? 1 : 0, round2(Math.min(q.spot, this.settings.catchTime)), q.wards,
       (now < q.shroudUntil ? 1 : 0) | (now < q.rootUntil ? 2 : 0), round2(Math.max(0, q.readyAt - now) / 1000)]);
-    const w = this.wards.map((x) => [x.owner, Math.round(x.x), Math.round(x.z)]);
-    const f = this.flares.map((x) => [x.owner, Math.round(x.x), Math.round(x.z)]);
+    const w = this.wards.map((x) => [x.owner, Math.round(x.x), Math.round(x.z), Math.max(0, Math.round(x.until - this.now()))]);
+    const f = this.flares.map((x) => [x.owner, Math.round(x.x), Math.round(x.z), x.fx, x.fz]);
     this.broadcast({ t: 'snap', ms, p, w, f });
   }
 }
